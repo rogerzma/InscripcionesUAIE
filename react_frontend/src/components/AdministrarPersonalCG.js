@@ -87,7 +87,8 @@ const AdministrarPersonalCG = () => {
       toast.success("Personal eliminado con éxito");
     } catch (error) {
       console.error("Error al eliminar personal:", error.message);
-      toast.error("Hubo un error al eliminar el personal");
+      const errorMessage = error.response?.data?.message || "Hubo un error al eliminar el personal";
+      toast.error(errorMessage);
     } finally {
       setMostrarModal(false);
     }

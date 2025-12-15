@@ -69,7 +69,9 @@ function ModificarPersonalCG() {
       }, 200); // Espera un poco para mostrar el toast antes de recargar
     } catch (error) {
       console.error("Error al actualizar el usuario:", error);
-      toast.error("Hubo un error al actualizar el usuario");
+      // Usar directamente el mensaje del servidor que ahora es específico
+      const errorMessage = error.response?.data?.message || "Hubo un error al actualizar el usuario";
+      toast.error(errorMessage);
     }
   };
 
@@ -188,7 +190,8 @@ function ModificarPersonalCG() {
                       setForm(prev => ({ ...prev, id_carrera: form.id_carrera }));
                       toast.success('Carrera actualizada correctamente');
                     } catch (error) {
-                      toast.error('Error al actualizar la carrera');
+                      const errorMessage = error.response?.data?.message || 'Error al actualizar la carrera';
+                      toast.error(errorMessage);
                     }
                   }}
                   style={{ padding: '6px 16px' }}

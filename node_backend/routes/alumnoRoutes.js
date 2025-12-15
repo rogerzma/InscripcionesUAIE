@@ -61,15 +61,20 @@ router.post('/subir-comprobante/:matricula', uploadComprobante.single('comproban
 // Rutas para las operaciones CRUD
 router.post('/', alumnoController.createAlumno);
 router.get('/', alumnoController.getAlumnos);
-router.get('/:id', alumnoController.getAlumnoById);
-router.get('/matricula/:matricula', alumnoController.getAlumnosAsignados); 
+
+// Rutas específicas ANTES de las genéricas
+router.get('/matricula/:matricula', alumnoController.getAlumnoByMatricula); // Obtener alumno por matrícula
+router.get('/asignados/:matricula', alumnoController.getAlumnosAsignados); // Obtener alumnos asignados a un personal
 router.get('/carrera/:matricula', alumnoController.getAlumnosCarrera);
 router.get('/carrera-admin/:matricula', alumnoController.getAlumnosCarreraAdmin);
 router.get('/horario/:id', alumnoController.getAlumnoByIdWithHorario);
+router.get('/estatus/:matricula', alumnoController.getEstatusHorario);
+
+// Rutas genéricas al FINAL
+router.get('/:id', alumnoController.getAlumnoById);
 router.put('/:id', alumnoController.updateAlumno);
 router.put('/horario/:id', alumnoController.updateAlumnoHorario);
 router.delete('/:id', alumnoController.deleteAlumno);
-router.get('/estatus/:matricula', alumnoController.getEstatusHorario);
 
 
 // Importar comprobantes de pago

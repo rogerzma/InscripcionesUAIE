@@ -120,7 +120,8 @@ function ModificarAlumno() {
       setMostrarModal(false); // Cierra el modal después de subir el archivo
     } catch (error) {
       console.error("Error al subir el archivo CSV:", error);
-      toast.error("Hubo un error al actualizar la base de datos");
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "Hubo un error al actualizar la base de datos";
+      toast.error(errorMessage);
     }
   };
 
@@ -147,7 +148,8 @@ function ModificarAlumno() {
       }, 200);  // Espera un poco para mostrar el toast antes de recargar
     } catch (error) {
       console.error("Error al actualizar el alumno:", error);
-      toast.error("Hubo un error al actualizar el alumno");
+      const errorMessage = error.response?.data?.message || "Hubo un error al actualizar el alumno";
+      toast.error(errorMessage);
     }
   };
 
@@ -213,7 +215,7 @@ function ModificarAlumno() {
               <div className="input-wrapper">
                 <label htmlFor="tutor">Tutor</label>
                 <select id="tutor" value={form.tutor} onChange={handleChange}>
-                  <option value="">Selecciona un tutor</option>
+                  <option value="">Sin tutor</option>
                   {tutores.map((tutor) => (
                     <option key={tutor._id} value={tutor._id}>
                       {tutor.nombre}

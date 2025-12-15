@@ -94,7 +94,8 @@ function CrearMateriaCG() {
         setMostrarModal(false);
       } catch (error) {
         console.error("Error al subir el archivo CSV:", error);
-        toast.error("Hubo un error al actualizar la base de datos");
+        const errorMessage = error.response?.data?.message || "Hubo un error al actualizar la base de datos";
+        toast.error(errorMessage);
       }
     };
     
@@ -154,10 +155,47 @@ function CrearMateriaCG() {
 
     const handleSubmit = async (e) => {
       e.preventDefault();
+      
+      // Validar campos requeridos
+      if (!formData.id_materia || !formData.id_materia.trim()) {
+        toast.error("Falta el campo: ID de materia");
+        return;
+      }
+      
+      if (!formData.nombre || !formData.nombre.trim()) {
+        toast.error("Falta el campo: Nombre de la materia");
+        return;
+      }
+      
+      if (!formData.id_carrera) {
+        toast.error("Falta el campo: Carrera");
+        return;
+      }
+      
+      if (!formData.salon || !formData.salon.trim()) {
+        toast.error("Falta el campo: Salón");
+        return;
+      }
+      
+      if (!formData.grupo || !formData.grupo.trim()) {
+        toast.error("Falta el campo: Grupo");
+        return;
+      }
+      
+      if (!formData.cupo || formData.cupo === '') {
+        toast.error("Falta el campo: Cupo");
+        return;
+      }
+      
+      if (!formData.docente) {
+        toast.error("Falta el campo: Docente");
+        return;
+      }
+      
       try {
         const { id_carrera } = formData;
         if (!id_carrera) {
-          alert("Error: No se encontró el ID de la carrera.");
+          toast.error("Error: No se encontró el ID de la carrera.");
           return;
         }
 

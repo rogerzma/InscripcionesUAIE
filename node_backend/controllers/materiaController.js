@@ -77,6 +77,36 @@ exports.createMateria = async (req, res) => {
     res.status(201).json(newMateria);
   } catch (error) {
     console.error('Error al crear la materia:', error);
+    
+    // Errores de validación de Mongoose
+    if (error.name === 'ValidationError') {
+      const camposFaltantes = Object.keys(error.errors).map(campo => {
+        switch(campo) {
+          case 'id_materia': return 'ID de materia';
+          case 'nombre': return 'nombre';
+          case 'id_carrera': return 'carrera';
+          case 'horarios': return 'horarios';
+          case 'salon': return 'salón';
+          case 'grupo': return 'grupo';
+          case 'cupo': return 'cupo';
+          default: return campo;
+        }
+      });
+      return res.status(400).json({ 
+        message: `Falta el campo: ${camposFaltantes.join(', ')}`,
+        campos: camposFaltantes 
+      });
+    }
+    
+    // Error de duplicado
+    if (error.code === 11000) {
+      const campoDuplicado = Object.keys(error.keyValue)[0];
+      return res.status(409).json({ 
+        message: `Ya existe una materia con ese ${campoDuplicado}`,
+        duplicado: campoDuplicado 
+      });
+    }
+    
     res.status(500).json({ message: 'Error al crear la materia', error: error.message });
   }
 };
@@ -184,7 +214,7 @@ exports.getMateriaById = async (req, res) => {
 
 // Actualizar materia con validación de empalme de horarios
 exports.updateMateria = async (req, res) => {
-  const { nombre, horarios, salon, semi, grupo, cupo, docente, laboratorio, id_materia } = req.body;
+  const { nombre, horarios, salon, semi, grupo, cupo, docente, laboratorio, id_materia, id_carrera } = req.body;
   const { id } = req.params;
 
   if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -244,6 +274,7 @@ exports.updateMateria = async (req, res) => {
     const materia = await Materia.findByIdAndUpdate(id,
       {
         id_materia,
+        id_carrera,
         nombre,
         horarios,
         salon,
@@ -281,6 +312,27 @@ exports.updateMateria = async (req, res) => {
     res.status(200).json(materia);
   } catch (error) {
     console.error("Error en updateMateria:", error);
+    
+    // Errores de validación de Mongoose
+    if (error.name === 'ValidationError') {
+      const camposFaltantes = Object.keys(error.errors).map(campo => {
+        switch(campo) {
+          case 'id_materia': return 'ID de materia';
+          case 'nombre': return 'nombre';
+          case 'id_carrera': return 'carrera';
+          case 'horarios': return 'horarios';
+          case 'salon': return 'salón';
+          case 'grupo': return 'grupo';
+          case 'cupo': return 'cupo';
+          default: return campo;
+        }
+      });
+      return res.status(400).json({ 
+        message: `Falta el campo: ${camposFaltantes.join(', ')}`,
+        campos: camposFaltantes 
+      });
+    }
+    
     res.status(500).json({ message: "Error al actualizar la materia", error });
   }
 };

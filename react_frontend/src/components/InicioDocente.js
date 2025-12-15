@@ -53,11 +53,12 @@ function InicioDocente() {
 
       // Si hay un estado guardado y no se viene de la validación, restaurar el estado
       if (estadoGuardado && !cameFromValidation) {
-        const { searchTerm, scrollY, alumnos: savedAlumnos, comprobantePorCarrera: savedComprobantePorCarrera } = JSON.parse(estadoGuardado);
+        const { searchTerm, scrollY, alumnos: savedAlumnos, comprobantePorCarrera: savedComprobantePorCarrera, comprobantes: savedComprobantes } = JSON.parse(estadoGuardado);
 
         setSearchTerm(searchTerm || "");
         setAlumnos(savedAlumnos || []);
         setComprobantePorCarrera(savedComprobantePorCarrera || {});
+        setComprobantes(savedComprobantes || []);
         setTimeout(() => window.scrollTo(0, scrollY || 0), 0);
 
         sessionStorage.removeItem("vistaAlumnoDocente");
@@ -71,6 +72,7 @@ function InicioDocente() {
           if (!matricula) {
             console.error("Matrícula del docente no encontrada");
             setError("Matrícula del docente no encontrada");
+            setLoading(false);
             return;
           }
   
@@ -118,15 +120,28 @@ function InicioDocente() {
               const res = await apiClient.get(`${API_URL}/api/coordinadores/comprobante-habilitado/${carrera}`);
               comprobanteCarreraTemp[carrera] = res.data.comprobantePagoHabilitado;
             } catch (error) {
+              console.log(`No se encontró configuración de comprobante para carrera ${carrera}, usando valor por defecto: true`);
               comprobanteCarreraTemp[carrera] = true;
             }
           }));
 
           setComprobantePorCarrera(comprobanteCarreraTemp);
           setAlumnos(alumnosConEstatus);
+
+          // Cargar comprobantes
+          try {
+            const comprobantesResponse = await apiClient.get(`${API_URL}/api/alumnos/comprobantes/lista`);
+            setComprobantes(comprobantesResponse.data);
+          } catch (error) {
+            console.error("Error al obtener comprobantes:", error);
+            setComprobantes([]);
+          }
+
+          setLoading(false);
         } catch (error) {
           console.error("Error al obtener los alumnos:", error);
           setError("Error al cargar los alumnos. Por favor, inténtalo de nuevo.");
+          setLoading(false);
         }
       };
 
@@ -140,26 +155,11 @@ function InicioDocente() {
       }
     }, [matriculaDocente, storedMatriculaDocente, location.state]);
 
-    // Guardar el estado de la vista en sessionStorage
+    // Limpiar estado de reload
     useEffect(() => {
       if (location.state?.reload) {
         window.history.replaceState({}, document.title);
       }
-    }, []);
-
-
-    useEffect(() => {
-      const fetchComprobantes = async () => {
-        try {
-          const response = await apiClient.get(`${API_URL}/api/alumnos/comprobantes/lista`);
-          setComprobantes(response.data); // 👈 Aquí llenas la lista
-        } catch (error) {
-          console.error("Error al obtener la lista de comprobantes:", error);
-          setComprobantes([]);
-        }
-      };
-
-      fetchComprobantes();
     }, []);
 
   const guardarEstadoVista = () => {

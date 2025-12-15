@@ -191,7 +191,7 @@ const AlumnoListCoord = () => {
 
   const handleNavigate4 = (alumno) => {
     guardarEstadoVista(); // Guarda el estado actual antes de navegar
-    navigate(`/coordinador/validar-pago/${alumno.matricula}`, { state: { nombre: alumno.nombre, matricula: alumno.matricula, matriculaCord: matriculaCord} });
+    navigate(`/coordinador/validar-pago/${alumno.matricula}`, { state: { nombre: alumno.nombre, matricula: alumno.matricula, matriculaTutor: matriculaCord} });
   };
 
   const handleModify = (alumno) => {
@@ -209,7 +209,8 @@ const AlumnoListCoord = () => {
       });
       toast.success(nuevoEstado ? "Comprobante habilitado" : "Comprobante deshabilitado");
     } catch (error) {
-      toast.error("Error al actualizar el estado del comprobante");
+      const errorMessage = error.response?.data?.message || "Error al actualizar el estado del comprobante";
+      toast.error(errorMessage);
     }
   };
 
@@ -231,7 +232,8 @@ const AlumnoListCoord = () => {
       setMostrarModal(false);
     } catch (error) {
       console.error('Error al eliminar alumno:', error);
-      toast.error("Hubo un error al eliminar el alumno");
+      const errorMessage = error.response?.data?.message || "Hubo un error al eliminar el alumno";
+      toast.error(errorMessage);
     }
   };
 

@@ -50,7 +50,8 @@ function Validacion1() {
         localStorage.setItem("IDAlumno", _id);
       } catch (error) {
         console.error("Error al obtener los datos del alumno:", error);
-        toast.error("Error al obtener los datos del alumno.");
+        const errorMessage = error.response?.data?.message || "Error al obtener los datos del alumno.";
+        toast.error(errorMessage);
       }
     };
 
@@ -113,7 +114,8 @@ function Validacion1() {
       navigate("/validacion-estatus");
     } catch (error) {
       console.error("Error al actualizar los datos del alumno:", error, id);
-      toast.error("Error al actualizar los datos del alumno.");
+      const errorMessage = error.response?.data?.message || "Error al actualizar los datos del alumno.";
+      toast.error(errorMessage);
     }
   };
 

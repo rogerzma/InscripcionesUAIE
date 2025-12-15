@@ -67,7 +67,8 @@ const AdministrarMateriasCoordinador = () => {
       fetchMaterias(); // Recargar la lista de materias
     } catch (error) {
       console.error("Error al eliminar la materia:", error);
-      toast.error("Error al eliminar la materia");
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "Error al eliminar la materia";
+      toast.error(errorMessage);
     } finally {
       setMostrarModal(false);
     }
@@ -171,7 +172,8 @@ const AdministrarMateriasCoordinador = () => {
       setEditMode(false); // Volver al modo estático
     } catch (error) {
       console.error("Error al actualizar las horas:", error);
-      toast.error("Error al actualizar las horas");
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "Error al actualizar las horas";
+      toast.error(errorMessage);
     }
   };
   

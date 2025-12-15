@@ -221,7 +221,9 @@ exports.getComprobantePagoHabilitado = async (req, res) => {
   try {
     const coordinador = await Coordinadores.findOne({ id_carrera });
     if (!coordinador) {
-      return res.status(404).json({ message: "Coordinador no encontrado" });
+      // Si no existe el coordinador, devolver valor por defecto (habilitado)
+      console.log(`Coordinador no encontrado para carrera ${id_carrera}, usando valor por defecto: true`);
+      return res.json({ comprobantePagoHabilitado: true });
     }
     res.json({ comprobantePagoHabilitado: coordinador.comprobantePagoHabilitado });
   } catch (error) {

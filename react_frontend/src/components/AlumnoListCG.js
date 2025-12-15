@@ -194,7 +194,8 @@ const AlumnoListCG = () => {
       toast.success("Alumno eliminado con éxito");
       setMostrarModal(false);
     } catch (error) {
-      toast.error("Hubo un error al eliminar el alumno");
+      const errorMessage = error.response?.data?.message || "Hubo un error al eliminar el alumno";
+      toast.error(errorMessage);
     }
   };
 

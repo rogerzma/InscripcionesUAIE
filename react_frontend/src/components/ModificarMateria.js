@@ -177,6 +177,7 @@ function ModificarMateria() {
     try {
       const materiaActualizada = {
         id_materia: formData.id_materia,
+        id_carrera: formData.id_carrera,
         nombre: formData.nombre,
         horarios: formData.horarios,
         salon: formData.salon,
@@ -184,7 +185,7 @@ function ModificarMateria() {
         grupo: formData.grupo,
         cupo: formData.cupo,
         laboratorio: formData.laboratorio,
-        docente: formData.docente
+        docente: formData.docente || null
       };
 
       await apiClient.put(`${API_URL}/api/materias/${materia._id}`, materiaActualizada);
@@ -194,11 +195,8 @@ function ModificarMateria() {
       }, 200);  // Espera un poco para mostrar el toast antes de recargar
     } catch (error) {
       // Mostrar mensaje específico si viene del backend
-      if (error.response && error.response.data && error.response.data.message) {
-        toast.error(error.response.data.message);
-      } else {
-        toast.error("Hubo un error al actualizar la materia");
-      }
+      const errorMessage = error.response?.data?.message || "Hubo un error al actualizar la materia";
+      toast.error(errorMessage);
     }
   };
 
@@ -286,8 +284,8 @@ function ModificarMateria() {
               </div>
               <div className="input-wrapper short-field2">
                 <label htmlFor="docente">Docente</label>
-                <select id="docente" value={formData.docente} onChange={handleChange} required>
-                  <option value="" disabled hidden>Seleccione un docente</option>
+                <select id="docente" value={formData.docente} onChange={handleChange}>
+                  <option value="">Sin docente</option>
                   {docentes.map((docente) => (
                     <option key={docente._id} value={docente._id}>
                       {docente.nombre}  {/* Muestra el nombre del docente */}

@@ -77,16 +77,63 @@ const asignarAlumnoATutor = async (tutorId, alumnoId) => {
 module.exports.createAlumno = async (req, res) => {
     const { matricula, nombre, correo, telefono, tutor, id_carrera } = req.body;
     try {
+        // Validar formato de matrícula (1 letra mayúscula + 4 dígitos)
+        if (!matricula || !/^[A-Z]\d{4}$/.test(matricula)) {
+            return res.status(400).json({ 
+                message: 'La matrícula debe tener el formato: 1 letra mayúscula seguida de 4 dígitos (Ej: A1234)' 
+            });
+        }
+
+        // Validar que se haya seleccionado una carrera
+        if (!id_carrera) {
+            return res.status(400).json({ message: 'Debe seleccionar una carrera' });
+        }
+
         // Crear el alumno
-        const alumno = new Alumnos({ matricula, nombre, correo, telefono, tutor, id_carrera });
+        const alumnoData = { matricula, nombre, correo, telefono, id_carrera };
+        if (tutor) {
+            alumnoData.tutor = tutor;
+        }
+        const alumno = new Alumnos(alumnoData);
         await alumno.save();
 
-        // Asignar el alumno al tutor
-        await asignarAlumnoATutor(tutor, alumno._id);
+        // Asignar el alumno al tutor solo si hay un tutor
+        if (tutor) {
+            await asignarAlumnoATutor(tutor, alumno._id);
+        }
 
         return res.status(201).json({ message: "Alumno creado", alumno });
     } catch (error) {
         console.error("Error al crear el alumno:", error);
+        
+        // Errores de validación de Mongoose
+        if (error.name === 'ValidationError') {
+            const camposFaltantes = Object.keys(error.errors).map(campo => {
+                switch(campo) {
+                    case 'matricula': return 'matrícula';
+                    case 'nombre': return 'nombre';
+                    case 'correo': return 'correo electrónico';
+                    case 'telefono': return 'teléfono';
+                    case 'id_carrera': return 'carrera';
+                    default: return campo;
+                }
+            });
+            return res.status(400).json({ 
+                message: `Falta el campo: ${camposFaltantes.join(', ')}`,
+                campos: camposFaltantes 
+            });
+        }
+        
+        // Error de duplicado
+        if (error.code === 11000) {
+            const campoDuplicado = Object.keys(error.keyValue)[0];
+            const nombreCampo = campoDuplicado === 'matricula' ? 'matrícula' : campoDuplicado;
+            return res.status(409).json({ 
+                message: `El ${nombreCampo} ya existe en el sistema`,
+                duplicado: campoDuplicado 
+            });
+        }
+        
         return res.status(500).json({ message: "Error del servidor", error });
     }
 };
@@ -183,9 +230,11 @@ exports.updateAlumno = async (req, res) => {
       ...(horarioGuardado ? { horario: horarioGuardado._id } : {}),
     };
     
-    // Solo agregar tutor si es un valor válido
+    // Solo agregar tutor si es un valor válido, sino establecer en null
     if (tutor && tutor !== '') {
       updateData.tutor = tutor;
+    } else {
+      updateData.tutor = null;
     }
 
     const alumnoActualizado = await Alumnos.findByIdAndUpdate(

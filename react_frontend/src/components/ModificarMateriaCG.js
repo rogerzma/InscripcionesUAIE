@@ -167,6 +167,7 @@ function ModificarMateriaCG() {
         horarios: Object.fromEntries(
           Object.entries(formData.horarios).map(([key, value]) => [key, value === "" ? null : value])
         ),
+        docente: formData.docente || null,
       };
 
       const response = await apiClient.put(
@@ -179,11 +180,8 @@ function ModificarMateriaCG() {
       }, 200);  // Espera un poco para mostrar el toast antes de recargar
     } catch (error) {
       // Mostrar mensaje específico del backend si existe
-      if (error.response && error.response.data && error.response.data.message) {
-        toast.error(error.response.data.message);
-      } else {
-        toast.error("Hubo un error al actualizar la materia");
-      }
+      const errorMessage = error.response?.data?.message || "Hubo un error al actualizar la materia";
+      toast.error(errorMessage);
       console.error("Error al actualizar la materia:", error);
     }
   };
@@ -274,8 +272,8 @@ function ModificarMateriaCG() {
               </div>
               <div className="input-wrapper">
                 <label htmlFor="docente">Docente</label>
-                <select id="docente" value={formData.docente} onChange={handleChange} required>
-                  <option value="" disabled hidden>Seleccione un docente</option>
+                <select id="docente" value={formData.docente} onChange={handleChange}>
+                  <option value="">Sin docente</option>
                   {docentes.map((docente) => (
                     <option key={docente._id} value={docente._id}>
                       {docente.nombre}

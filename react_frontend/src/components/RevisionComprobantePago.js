@@ -48,12 +48,22 @@ function RevisionComprobantePago() {
         } 
       }
     )
-      .then(response => response.json())
+      .then(response => {
+        if (!response.ok) {
+          console.log(`No se pudo obtener el horario para ${matricula}`);
+          setHorario([]);
+          return null;
+        }
+        return response.json();
+      })
       .then(data => {
-        setHorario(data.horario || []);
+        if (data) {
+          setHorario(data.horario || []);
+        }
       })
       .catch(error => {
-        // No pasa nada si no hay horario
+        console.log("Error al obtener horario, usando horario vac\u00edo");
+        setHorario([]);
       });
   }, [matricula]);
 
@@ -86,18 +96,27 @@ function RevisionComprobantePago() {
       // Filtrar por la matrícula para determinar el tipo de usuario
       if (tutorMatricula.startsWith("T")) {
         navigate("/tutor", { state: { reload: true } });
-      } else if (tutorMatricula.startsWith("P")) {
-        // Regresar a la vista principal de docente (no a /docente/alumnos)
-        navigate("/docente/alumnos", { state: { reload: true } });
       } else if(tutorMatricula.startsWith("CG")){
-        navigate("/coord-gen/alumnos", { state: { reload: true } });
+        // Limpiar sessionStorage y navegar con reload para coordinador general
+        sessionStorage.removeItem("vistaAlumnoCoordGen");
+        setTimeout(() => {
+          navigate("/coord-gen/alumnos", { state: { reload: true }, replace: true });
+        }, 1000);
       } else if(tutorMatricula.startsWith("C")){
-        navigate("/coordinador/alumnos", { state: { reload: true } });
+        // Limpiar sessionStorage y navegar con reload para coordinador
+        sessionStorage.removeItem("vistaAlumnoCoord");
+        setTimeout(() => {
+          navigate("/coordinador/alumnos", { state: { reload: true }, replace: true });
+        }, 1000);
+      } else if (tutorMatricula.startsWith("P")) {
+        // Regresar a la vista principal de docente
+        navigate("/docente/alumnos", { state: { reload: true } });
       } else {
         navigate(-1);
       }
     } catch (error) {
-      toast.error("Error al actualizar el estatus del comprobante");
+      const errorMessage = error.response?.data?.message || "Error al actualizar el estatus del comprobante";
+      toast.error(errorMessage);
     }
   };
 

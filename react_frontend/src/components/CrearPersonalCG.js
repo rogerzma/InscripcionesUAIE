@@ -42,6 +42,13 @@ function CrearPersonal() {
   const validarMatricula = (matricula) => {
     return /^(CG|AG)\d{4}$|^[A-Z]\d{4}$/.test(matricula);
   };
+
+  const validarPassword = (password) => {
+    // Mínimo 8 caracteres y al menos un carácter especial
+    const tieneMinimo8 = password.length >= 8;
+    const tieneCaracterEspecial = /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\/~`]/.test(password);
+    return tieneMinimo8 && tieneCaracterEspecial;
+  };
   
 
   // Manejo de roles y matricula
@@ -112,9 +119,51 @@ function CrearPersonal() {
   const handleSubmit = async (e) => {
     e.preventDefault();
   
+    // Validar campos requeridos
+    if (!form.nombre || !form.nombre.trim()) {
+      toast.error("Falta el campo: Nombre");
+      return;
+    }
+    
+    if (!form.matricula || !form.matricula.trim()) {
+      toast.error("Falta el campo: ID del usuario");
+      return;
+    }
+    
+    if (!validarMatricula(form.matricula)) {
+      toast.error("El ID del usuario no tiene el formato correcto");
+      return;
+    }
+    
+    if (!form.correo || !form.correo.trim()) {
+      toast.error("Falta el campo: Correo electrónico");
+      return;
+    }
+    
+    if (!form.telefono || !form.telefono.trim()) {
+      toast.error("Falta el campo: Teléfono");
+      return;
+    }
+    
+    if (!form.roles) {
+      toast.error("Falta el campo: Permisos");
+      return;
+    }
+    
+    if (!form.password || !form.password.trim()) {
+      toast.error("Falta el campo: Contraseña");
+      return;
+    }
+    
+    // Validar contraseña
+    if (!validarPassword(form.password)) {
+      toast.error("La contraseña debe tener mínimo 8 caracteres y al menos un carácter especial (!@#$%^&*...)");
+      return;
+    }
+  
     // Verificar que si el rol es Coordinador o Administrador, se haya seleccionado una carrera
     if ((form.roles === "C" || form.roles === "A") && !form.id_carrera) {
-      toast.error("Debe seleccionar una carrera para el Coordinador o Administrador.");
+      toast.error("Falta el campo: Carrera (requerido para Coordinador o Administrador)");
       return;
     }
   
@@ -145,7 +194,9 @@ function CrearPersonal() {
           toast.error(`Error: El usuario ya existe. Campo duplicado: ${duplicado}`);
         }
       } else {
-        toast.error("Hubo un error al agregar el usuario");
+        // Usar directamente el mensaje del servidor que ahora es específico
+        const errorMessage = error.response?.data?.message || "Hubo un error al agregar el usuario";
+        toast.error(errorMessage);
       }
     }
   };
@@ -188,7 +239,8 @@ function CrearPersonal() {
       setMostrarModal(false);
     } catch (error) {
       console.error("Error al subir el archivo CSV:", error);
-      toast.error("Hubo un error al actualizar la base de datos");
+      const errorMessage = error.response?.data?.message || "Hubo un error al actualizar la base de datos";
+      toast.error(errorMessage);
     }
   };
 

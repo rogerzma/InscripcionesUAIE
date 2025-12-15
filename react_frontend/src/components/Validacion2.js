@@ -112,7 +112,8 @@ function Validacion2() {
       toast.success("El comprobante de pago se ha subido correctamente.");
       setArchivo(null);
     } catch (error) {
-      toast.error("Error al subir el comprobante.");
+      const errorMessage = error.response?.data?.message || "Error al subir el comprobante.";
+      toast.error(errorMessage);
       console.error(error);
     }
   };

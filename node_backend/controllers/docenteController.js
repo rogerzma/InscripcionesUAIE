@@ -96,8 +96,20 @@ exports.getHorarioAlumno = async (req, res) => {
             }
         });
 
-        if (!alumno || !alumno.horario) {
-            return res.status(404).json({ message: 'Horario no encontrado para este alumno' });
+        if (!alumno) {
+            return res.status(404).json({ message: 'Alumno no encontrado' });
+        }
+
+        if (!alumno.horario) {
+            // Devolver horario vacío en lugar de error
+            return res.status(200).json({
+                alumno: {
+                    nombre: alumno.nombre,
+                    matricula: alumno.matricula,
+                    id_carrera: alumno.id_carrera
+                },
+                horario: []
+            });
         }
 
         // Formatear la respuesta para enviarla a la interfaz

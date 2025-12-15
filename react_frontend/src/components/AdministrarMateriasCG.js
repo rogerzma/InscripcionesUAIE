@@ -110,7 +110,8 @@ const AdministrarMateriasCG = () => {
       fetchMaterias(); // Recargar la lista de materias
     } catch (error) {
       console.error("Error al eliminar la materia:", error);
-      toast.error("Error al eliminar la materia");
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "Error al eliminar la materia";
+      toast.error(errorMessage);
     } finally {
       setMostrarModal(false);
     }

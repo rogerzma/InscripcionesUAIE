@@ -14,6 +14,7 @@
   background-color: white;
   display: flex;
   flex-direction: column;
+  position: relative; /* Para que los botones absolutos se posicionen respecto a este contenedor */
 }
 
   .horario-container h2,
@@ -26,7 +27,7 @@
 .back-button {
   position: absolute;
   top: 10px;
-  left: 10px;
+  left: 0;
   padding: 10px 20px;
   margin: 0;
   border-radius: 12px;

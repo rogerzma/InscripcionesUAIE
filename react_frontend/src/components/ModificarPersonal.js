@@ -46,7 +46,9 @@ function ModificarPersonal() {
       }, 200); // Espera un poco para mostrar el toast antes de recargar
     } catch (error) {
       console.error("Error al actualizar el usuario:", error);
-      toast.error("Hubo un error al actualizar el usuario");
+      // Usar directamente el mensaje del servidor que ahora es específico
+      const errorMessage = error.response?.data?.message || "Hubo un error al actualizar el usuario";
+      toast.error(errorMessage);
     }
   };
 

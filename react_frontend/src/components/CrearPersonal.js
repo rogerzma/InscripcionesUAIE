@@ -28,6 +28,13 @@ function CrearPersonal() {
     return /^(CG|AG)?[A-Z]\d{4}$/.test(matricula); 
   };
 
+  const validarPassword = (password) => {
+    // Mínimo 8 caracteres y al menos un carácter especial
+    const tieneMinimo8 = password.length >= 8;
+    const tieneCaracterEspecial = /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\/~`]/.test(password);
+    return tieneMinimo8 && tieneCaracterEspecial;
+  };
+
   const handleChange = (e) => {
     const { id, value } = e.target;
   
@@ -73,6 +80,49 @@ function CrearPersonal() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validar campos requeridos
+    if (!form.nombre || !form.nombre.trim()) {
+      toast.error("Falta el campo: Nombre");
+      return;
+    }
+    
+    if (!form.matricula || !form.matricula.trim()) {
+      toast.error("Falta el campo: ID del usuario");
+      return;
+    }
+    
+    if (!validarMatricula(form.matricula)) {
+      toast.error("El ID del usuario no tiene el formato correcto");
+      return;
+    }
+    
+    if (!form.correo || !form.correo.trim()) {
+      toast.error("Falta el campo: Correo electrónico");
+      return;
+    }
+    
+    if (!form.telefono || !form.telefono.trim()) {
+      toast.error("Falta el campo: Teléfono");
+      return;
+    }
+    
+    if (!form.roles || (Array.isArray(form.roles) && form.roles.length === 0)) {
+      toast.error("Falta el campo: Permisos");
+      return;
+    }
+    
+    if (!form.password || !form.password.trim()) {
+      toast.error("Falta el campo: Contraseña");
+      return;
+    }
+    
+    // Validar contraseña
+    if (!validarPassword(form.password)) {
+      toast.error("La contraseña debe tener mínimo 8 caracteres y al menos un carácter especial (!@#$%^&*...)");
+      return;
+    }
+    
     try {
       const formData = { ...form, id_carrera };
       const response = await apiClient.post(`${API_URL}/api/personal`, formData);
@@ -81,6 +131,8 @@ function CrearPersonal() {
         navigate("/coordinador/personal", { state: { reload: true } });
       }, 200); // Espera un poco para mostrar el toast antes de recargar
     } catch (error) {
+      console.error("Error al agregar el usuario:", error);
+      
       // Verifica si el error es por matrícula duplicada
       if (
         error.response &&
@@ -92,9 +144,10 @@ function CrearPersonal() {
       ) {
         toast.error("La matrícula ingresada ya existe en el sistema");
       } else {
-        toast.error("Hubo un error al agregar el usuario");
+        // Usar directamente el mensaje del servidor que ahora es específico
+        const errorMessage = error.response?.data?.message || "Hubo un error al agregar el usuario";
+        toast.error(errorMessage);
       }
-      console.error("Error al agregar el usuario:", error);
     }
   };
 
@@ -142,7 +195,8 @@ function CrearPersonal() {
       setMostrarModal(false);
     } catch (error) {
       console.error("Error al subir el archivo CSV:", error);
-      toast.error("Hubo un error al actualizar la base de datos");
+      const errorMessage = error.response?.data?.message || "Hubo un error al actualizar la base de datos";
+      toast.error(errorMessage);
     }
   };
 

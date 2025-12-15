@@ -25,6 +25,11 @@ function CrearAlumno() {
     matriculaCord: matriculaCord
   });
 
+  const validarMatricula = (matricula) => {
+    // 1 letra mayúscula + 4 dígitos
+    return /^[A-Z]\d{4}$/.test(matricula);
+  };
+
 
   // Obtener la lista de tutores desde la API
   useEffect(() => {
@@ -72,10 +77,18 @@ function CrearAlumno() {
   
 
   const handleChange = (e) => {
-    setForm({
-      ...form,
-      [e.target.id]: e.target.value
-    });
+    const { id, value } = e.target;
+    
+    // Convertir matrícula a mayúsculas y limitar caracteres
+    if (id === "matricula") {
+      const upperValue = value.toUpperCase();
+      // Solo permitir letras mayúsculas al inicio y números después, máximo 5 caracteres
+      if (/^[A-Z]?\d{0,4}$/.test(upperValue) || upperValue === "") {
+        setForm({ ...form, [id]: upperValue });
+      }
+    } else {
+      setForm({ ...form, [id]: value });
+    }
   };
 
   const handleLogout = () => {
@@ -90,15 +103,50 @@ function CrearAlumno() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validar campos requeridos
+    if (!form.nombre || !form.nombre.trim()) {
+      toast.error("Falta el campo: Nombre");
+      return;
+    }
+    
+    if (!form.matricula || !form.matricula.trim()) {
+      toast.error("Falta el campo: Matrícula");
+      return;
+    }
+    
+    // Validar matrícula
+    if (!validarMatricula(form.matricula)) {
+      toast.error("La matrícula debe tener 1 letra mayúscula seguida de 4 dígitos (Ej: A1234)");
+      console.log("Matrícula inválida:", form.matricula);
+      return;
+    }
+    
+    if (!form.correo || !form.correo.trim()) {
+      toast.error("Falta el campo: Correo electrónico");
+      return;
+    }
+    
+    if (!form.telefono || !form.telefono.trim()) {
+      toast.error("Falta el campo: Teléfono");
+      return;
+    }
+    
     try {
+      console.log("Enviando datos del alumno:", form);
       const response = await apiClient.post(`${API_URL}/api/alumnos`, form);
+      console.log("Alumno creado exitosamente:", response.data);
+      toast.success("Alumno agregado con éxito");
       setForm({ nombre: "", matricula: "", correo: "", telefono: "", tutor: "" }); // Reset form
       setTimeout(() => {
         navigate("/coordinador/alumnos", { state: { reload: true } });
       }, 200); // Espera un poco para mostrar el toast antes de recargar
     } catch (error) {
-      console.error("Error al agregar el alumno:", error);
-      toast.error("Hubo un error al agregar el alumno");
+      console.error("Error completo al agregar el alumno:", error);
+      console.error("Respuesta del servidor:", error.response?.data);
+      console.error("Status del error:", error.response?.status);
+      const errorMessage = error.response?.data?.message || "Hubo un error al agregar el alumno";
+      toast.error(errorMessage);
     }
   };
 
@@ -156,9 +204,11 @@ function CrearAlumno() {
                 <input
                   type="text"
                   id="matricula"
-                  placeholder="Ingresar la matricula"
+                  placeholder="Ej: A1234"
                   value={form.matricula}
                   onChange={handleChange}
+                  maxLength={5}
+                  required
                 />
               </div>
             </div>
@@ -184,12 +234,11 @@ function CrearAlumno() {
                 />
               </div>
             </div>
-            {/* Nuevo campo para seleccionar el tutor */}
             <div className="form-group">
               <div className="input-wrapper">
-                <label htmlFor="tutor">Tutor</label>
+                <label htmlFor="tutor">Tutor (Opcional)</label>
                 <select id="tutor" value={form.tutor} onChange={handleChange}>
-                  <option value="">Selecciona un tutor</option>
+                  <option value="">Selecciona un tutor (opcional)</option>
                   {tutores.map((tutor) => (
                     <option key={tutor._id} value={tutor._id}>
                       {tutor.nombre}

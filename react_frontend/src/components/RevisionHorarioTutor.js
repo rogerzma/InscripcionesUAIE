@@ -29,12 +29,21 @@ function RevisionHorarioTutor() {
 
       }
     )
-      .then(response => response.json())
+      .then(response => {
+        if (!response.ok) {
+          console.log(`No se pudo obtener el horario para ${matricula}`);
+          throw new Error('No se pudo obtener el horario');
+        }
+        return response.json();
+      })
       .then(data => {
         setAlumno(data.alumno);
-        setHorario(data.horario);
+        setHorario(data.horario || []);
       })
-      .catch(error => console.error("Error al cargar el horario:", error));
+      .catch(error => {
+        console.error("Error al cargar el horario:", error);
+        setHorario([]);
+      });
   }, [matricula]);
 
   const eliminarHorario = async () => {
