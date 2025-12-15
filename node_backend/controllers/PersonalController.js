@@ -42,7 +42,9 @@ exports.createPersonal = async (req, res) => {
             }
         }
         
-        const newPersonal = new Personal({ matricula, nombre, password, roles, correo, telefono });
+        // Hashear la contraseña antes de guardar
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const newPersonal = new Personal({ matricula, nombre, password: hashedPassword, roles, correo, telefono });
         const usuarioGuardado = await newPersonal.save();
 
         if (roles === 'D') {
@@ -82,7 +84,7 @@ exports.createPersonal = async (req, res) => {
             const nuevoAdministradorGen = new AdministradorGenMdl({
                 nombre,
                 personalMatricula: usuarioGuardado.matricula,
-                password
+                password: hashedPassword
             });
             await nuevoAdministradorGen.save();
         } else {
@@ -210,6 +212,10 @@ exports.getPersonalById = async (req, res) => {
 
 exports.updatePersonal = async (req, res) => {
   try {
+      // Si se envía una contraseña, hashearla antes de guardar
+      if (req.body.password) {
+          req.body.password = await bcrypt.hash(req.body.password, 10);
+      }
       const personal = await Personal.findByIdAndUpdate(
           req.params.id,
           { $set: req.body }, // Actualiza todos los campos enviados en la solicitud
@@ -433,10 +439,13 @@ exports.subirPersonalCSV = async (req, res) => {
             roles = roles.split(",").map(r => r.trim().toUpperCase());
           }
 
+          // Hashear la contraseña antes de guardar
+          const hashedPassword = await bcrypt.hash(password, 10);
+
           // Actualizar o crear personal
           await Personal.findOneAndUpdate(
             { matricula },
-            { nombre, telefono, correo, roles, password },
+            { nombre, telefono, correo, roles, password: hashedPassword },
             { upsert: true, new: true }
           );
 
