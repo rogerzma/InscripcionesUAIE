@@ -20,7 +20,7 @@ const tutorRoutes = require('./routes/tutorRoutes');
 const docenteRoutes = require('./routes/docenteRoutes');
 const historialAcademicoRoutes = require('./routes/historialAcademicoRoutes');
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 const HistorialAcademico = require('./models/HistorialAcademico');
 const Alumno = require('./models/Alumno');
 const Personal = require('./models/Personal');
@@ -46,7 +46,7 @@ app.use('/descargas', express.static(path.join(__dirname, 'exports')));
 app.use('/uploads/comprobantes', express.static('uploads/comprobantes'));
 
 // Conexión a MongoDB
-mongoose.connect('mongodb+srv://Stefano117:Mixbox360@cluster0.qgw2j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
+mongoose.connect(process.env.MONGO_URI, {
 
 }).then(async () => {
   console.log('Conectado a MongoDB');
@@ -54,6 +54,8 @@ mongoose.connect('mongodb+srv://Stefano117:Mixbox360@cluster0.qgw2j.mongodb.net/
 }).catch(error => {
   console.error('Error al conectar a MongoDB:', error);
 });
+
+console.log('MONGO_URI:', process.env.MONGO_URI);
 
 //Apartado para generar el historial académico automáticamente 
 cron.schedule('53 11 * * *', async () => {

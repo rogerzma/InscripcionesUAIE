@@ -103,7 +103,7 @@ exports.updateAlumno = async (req, res) => {
     }
 
     // Eliminar al alumno del tutor anterior
-    if (alumno) {
+    if (alumno && alumno.tutor) {
       const tutorAnteriorAsignado = await Personal.findById(alumno.tutor);
       if (tutorAnteriorAsignado) {
         const TutorModel = await Tutores.findOne({ personalMatricula: tutorAnteriorAsignado.matricula });
@@ -135,55 +135,62 @@ exports.updateAlumno = async (req, res) => {
       }
     }
 
-    // Buscar el nuevo tutor
-    const tutorAsignado = await Personal.findById(tutor);
-    if (!tutorAsignado) {
-    }
+    // Solo procesar nuevo tutor si se proporciona un ID válido
+    if (tutor && tutor !== '') {
+      // Buscar el nuevo tutor
+      const tutorAsignado = await Personal.findById(tutor);
+      if (!tutorAsignado) {
+        return res.status(404).json({ message: 'Tutor no encontrado' });
+      }
 
-    // Buscar el tutor en las colecciones Tutor, Docente, Coordinador, Administrador y Coordinador General
-    const TutorModel = await Tutores.findOne({ personalMatricula: tutorAsignado.matricula });
-    const DocenteModel = await Docentes.findOne({ personalMatricula: tutorAsignado.matricula });
-    const CoordinadorModel = await Coordinadores.findOne({ personalMatricula: tutorAsignado.matricula });
-    const AdministradorModel = await Administradores.findOne({ personalMatricula: tutorAsignado.matricula });
-    const CoordinadorGenModel = await CoordinadorGen.findOne({ personalMatricula: tutorAsignado.matricula });
+      // Buscar el tutor en las colecciones Tutor, Docente, Coordinador, Administrador y Coordinador General
+      const TutorModel = await Tutores.findOne({ personalMatricula: tutorAsignado.matricula });
+      const DocenteModel = await Docentes.findOne({ personalMatricula: tutorAsignado.matricula });
+      const CoordinadorModel = await Coordinadores.findOne({ personalMatricula: tutorAsignado.matricula });
+      const AdministradorModel = await Administradores.findOne({ personalMatricula: tutorAsignado.matricula });
+      const CoordinadorGenModel = await CoordinadorGen.findOne({ personalMatricula: tutorAsignado.matricula });
 
-    if (!TutorModel && !DocenteModel && !CoordinadorModel && !AdministradorModel && !CoordinadorGenModel) {
-    }
-
-    // Agregar el alumno al nuevo tutor
-    if (TutorModel) {
-      TutorModel.alumnos.push(alumno._id);
-      await TutorModel.save();
-    }
-    if (DocenteModel) {
-      DocenteModel.alumnos.push(alumno._id);
-      await DocenteModel.save();
-    }
-    if (CoordinadorModel) {
-      CoordinadorModel.alumnos.push(alumno._id);
-      await CoordinadorModel.save();
-    }
-    if (AdministradorModel) {
-      AdministradorModel.alumnos.push(alumno._id);
-      await AdministradorModel.save();
-    }
-    if (CoordinadorGenModel) {
-      CoordinadorGenModel.alumnos.push(alumno._id);
-      await CoordinadorGenModel.save();
+      // Agregar el alumno al nuevo tutor
+      if (TutorModel) {
+        TutorModel.alumnos.push(alumno._id);
+        await TutorModel.save();
+      }
+      if (DocenteModel) {
+        DocenteModel.alumnos.push(alumno._id);
+        await DocenteModel.save();
+      }
+      if (CoordinadorModel) {
+        CoordinadorModel.alumnos.push(alumno._id);
+        await CoordinadorModel.save();
+      }
+      if (AdministradorModel) {
+        AdministradorModel.alumnos.push(alumno._id);
+        await AdministradorModel.save();
+      }
+      if (CoordinadorGenModel) {
+        CoordinadorGenModel.alumnos.push(alumno._id);
+        await CoordinadorGenModel.save();
+      }
     }
 
     // Actualizar el alumno con los nuevos datos
+    const updateData = {
+      matricula,
+      id_carrera,
+      nombre,
+      correo,
+      telefono,
+      ...(horarioGuardado ? { horario: horarioGuardado._id } : {}),
+    };
+    
+    // Solo agregar tutor si es un valor válido
+    if (tutor && tutor !== '') {
+      updateData.tutor = tutor;
+    }
+
     const alumnoActualizado = await Alumnos.findByIdAndUpdate(
       req.params.id,
-      {
-        matricula,
-        id_carrera,
-        nombre,
-        correo,
-        telefono,
-        ...(horarioGuardado ? { horario: horarioGuardado._id } : {}),
-         tutor,
-      },
+      updateData,
       { new: true }
     );
 
