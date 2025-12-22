@@ -11,6 +11,17 @@ function ModificarPersonalCG() {
   const personalSeleccionado = location.state?.personal || {}; // Recibir los datos del personal seleccionado
 
   const [mostrarCarrera, setMostrarCarrera] = useState(false); // Mostrar campo de carrera
+  const [nuevaPassword, setNuevaPassword] = useState(""); // Nueva contraseña
+  const [actualizandoPassword, setActualizandoPassword] = useState(false); // Estado de carga
+  const [mostrarPassword, setMostrarPassword] = useState(false); // Mostrar/ocultar contraseña nueva
+
+  const validarPassword = (password) => {
+    // Mínimo 8 caracteres y al menos un carácter especial
+    const tieneMinimo8 = password.length >= 8;
+    const tieneCaracterEspecial = /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\/~`]/.test(password);
+    return tieneMinimo8 && tieneCaracterEspecial;
+  };
+
   const [form, setForm] = useState({
     nombre: personalSeleccionado.nombre || "",
     matricula: personalSeleccionado.matricula || "",
@@ -199,6 +210,76 @@ function ModificarPersonalCG() {
                 >Actualizar carrera</button>
               </div>
             )}
+            {/* Apartado para actualizar contraseña */}
+            <div className="form-group" style={{ marginTop: '20px', border: '1px solid #ccc', borderRadius: '8px', padding: '15px', background: '#f9f9f9' }}>
+              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>Actualizar contraseña</label>
+              <div style={{ marginBottom: '10px' }}>
+                <label style={{ marginRight: '10px' }}>Contraseña actual:</label>
+                <span style={{ fontFamily: 'monospace', letterSpacing: '2px' }}>••••••••</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ position: 'relative', maxWidth: '250px' }}>
+                  <input
+                    type={mostrarPassword ? "text" : "password"}
+                    placeholder="Nueva contraseña"
+                    value={nuevaPassword}
+                    onChange={(e) => setNuevaPassword(e.target.value)}
+                    style={{ padding: '9px', paddingRight: '40px', borderRadius: '4px', border: '1px solid #ccc', width: '100%', boxSizing: 'border-box' }}
+                  />
+                  <span
+                    onClick={() => setMostrarPassword(!mostrarPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '10px',
+                      top: '0',
+                      bottom: '0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      cursor: 'pointer'
+                    }}
+                    title={mostrarPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  >
+                    {mostrarPassword ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    )}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!nuevaPassword || !validarPassword(nuevaPassword)) {
+                      toast.error('La contraseña debe tener mínimo 8 caracteres y al menos un carácter especial (!@#$%^&*...)');
+                      return;
+                    }
+                    setActualizandoPassword(true);
+                    try {
+                      await apiClient.put(`${API_URL}/api/personal/${personalSeleccionado._id}`, {
+                        password: nuevaPassword
+                      });
+                      toast.success('Contraseña actualizada correctamente');
+                      setNuevaPassword('');
+                    } catch (error) {
+                      const errorMessage = error.response?.data?.message || 'Error al actualizar la contraseña';
+                      toast.error(errorMessage);
+                    } finally {
+                      setActualizandoPassword(false);
+                    }
+                  }}
+                  style={{ padding: '8px 16px' }}
+                  disabled={actualizandoPassword || !nuevaPassword}
+                >
+                  {actualizandoPassword ? 'Guardando...' : 'Guardar contraseña'}
+                </button>
+              </div>
+            </div>
             <div className="persona1-buttons">
               <button type="submit">Actualizar</button>
             </div>

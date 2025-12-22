@@ -825,10 +825,6 @@ exports.exportarAlumnosCSVPorCarrera = async (req, res) => {
         matricula: { $in: matriculas }
       }).populate("tutor");
 
-      if (alumnos.length === 0) {
-        return res.status(404).json({ message: "No se encontraron alumnos para exportar." });
-      }
-
       const formattedData = alumnos.map((alumno) => ({
         matricula: alumno.matricula,
         nombre: alumno.nombre,

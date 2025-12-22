@@ -579,10 +579,6 @@ exports.exportarCSVMateriasFiltrado = async (req, res) => {
 
     const materias = await Materia.find({ _id: { $in: ids } }).populate("docente");
 
-    if (materias.length === 0) {
-      return res.status(404).json({ message: "No se encontraron materias con esos filtros." });
-    }
-
     const formattedData = materias.map((m) => ({
       id_materia: m.id_materia,
       id_carrera: m.id_carrera,
@@ -629,10 +625,6 @@ exports.exportarCSVPorCarreraFiltrado = async (req, res) => {
 
     const materias = await Materia.find({ _id: { $in: ids }, id_carrera }).populate("docente");
 
-    if (materias.length === 0) {
-      return res.status(404).json({ message: "No se encontraron materias con esos filtros" });
-    }
-
     const formattedData = materias.map((m) => ({
       id_materia: m.id_materia,
       id_carrera: m.id_carrera,
@@ -641,7 +633,7 @@ exports.exportarCSVPorCarreraFiltrado = async (req, res) => {
       grupo: m.grupo,
       cupo: m.cupo,
       docente: m.docente ? m.docente.personalMatricula : "Sin asignar",
-      laboratorio: m.laboratorio ? "Sí" : "No", // <-- Aquí el cambio
+      laboratorio: m.laboratorio ? "Sí" : "No",
       lunes: m.horarios.lunes || "-",
       martes: m.horarios.martes || "-",
       miercoles: m.horarios.miercoles || "-",

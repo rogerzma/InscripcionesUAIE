@@ -129,6 +129,16 @@ exports.getPersonal = async (req, res) => {
     }
 };
 
+// Obtener solo administradores generales (AG)
+exports.getAdministradoresGenerales = async (req, res) => {
+    try {
+        const administradoresGenerales = await Personal.find({ roles: 'AG' });
+        res.status(200).json(administradoresGenerales);
+    } catch (error) {
+        res.status(500).json({ message: 'Error al obtener administradores generales', error });
+    }
+};
+
 exports.getPersonalByCarrera = async (req, res) => {
   console.log("Obteniendo personal por carrera");
   try {
@@ -718,10 +728,6 @@ exports.exportarPersonalCSV = async (req, res) => {
       matricula: { $in: matriculas },
     });
 
-    if (personal.length === 0) {
-      return res.status(404).json({ message: "No se encontró personal para los filtros aplicados." });
-    }
-
     const formattedData = personal.map(p => ({
       matricula: p.matricula,
       nombre: p.nombre,
@@ -756,10 +762,6 @@ exports.exportarPersonalCSV = async (req, res) => {
       const personal = await Personal.find({
         matricula: { $in: matriculas }
       });
-
-      if (personal.length === 0) {
-        return res.status(404).json({ message: "No se encontró personal para los filtros aplicados." });
-      }
 
       const formattedData = personal.map((p) => ({
         matricula: p.matricula,

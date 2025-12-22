@@ -45,14 +45,22 @@ const AdministrarPersonalCG = () => {
         return;
       }
       try {
+        // Obtener personal regular (excluye CG y AG)
         const response = await apiClient.get(`${API_URL}/api/personal`);
-        const personalConCarrera = await Promise.all(response.data.map(async (persona) => {
+
+        // Obtener administradores generales (AG)
+        const agResponse = await apiClient.get(`${API_URL}/api/personal/administradores-generales`);
+
+        // Combinar ambos resultados
+        const todosPersonal = [...response.data, ...agResponse.data];
+
+        const personalConCarrera = await Promise.all(todosPersonal.map(async (persona) => {
           try {
-        const carreraResponse = await apiClient.get(`${API_URL}/api/cordgen/carrera/${persona.matricula}`);
-        return { ...persona, id_carrera: carreraResponse.data.id_carrera };
+            const carreraResponse = await apiClient.get(`${API_URL}/api/cordgen/carrera/${persona.matricula}`);
+            return { ...persona, id_carrera: carreraResponse.data.id_carrera };
           } catch (error) {
-        console.error(`Error al obtener id_carrera para ${matricula}:`, error.message);
-        return persona;
+            console.error(`Error al obtener id_carrera para ${persona.matricula}:`, error.message);
+            return persona;
           }
         }));
         setPersonal(personalConCarrera);
@@ -98,7 +106,7 @@ const AdministrarPersonalCG = () => {
     if (!Array.isArray(roles)) {
       return 'Desconocido';
     }
-  
+
     return roles.map(role => {
       switch (role) {
         case 'D':
@@ -109,6 +117,10 @@ const AdministrarPersonalCG = () => {
           return 'Coordinador';
         case 'A':
           return 'Administrador';
+        case 'AG':
+          return 'Administrador General';
+        case 'CG':
+          return 'Coordinador General';
         default:
           return 'Desconocido';
       }
@@ -241,14 +253,14 @@ const AdministrarPersonalCG = () => {
               {personalFiltrado.length > 0
                 ? personalFiltrado
                     .sort((a, b) => {
-                      const roleOrder = { 'C': 1, 'A': 2, 'D': 3, 'T': 4 };
+                      const roleOrder = { 'AG': 1, 'C': 2, 'A': 3, 'D': 4, 'T': 5 };
                       const aRole = a.roles.find(role => roleOrder[role]) || 'T';
                       const bRole = b.roles.find(role => roleOrder[role]) || 'T';
                       return roleOrder[aRole] - roleOrder[bRole];
                     })
                     .map(personal => (
                       <tr key={personal.matricula}>
-                        <td>{['C', 'A'].some(role => personal.roles.includes(role)) ? personal.id_carrera : '-'}</td>
+                        <td>{['C', 'A', 'AG'].some(role => personal.roles.includes(role)) ? (personal.id_carrera || 'General') : '-'}</td>
                         <td>{personal.nombre}</td>
                         <td>{personal.matricula}</td>
                         <td>{getRoleText(personal.roles)}</td>

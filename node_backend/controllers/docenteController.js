@@ -153,11 +153,7 @@ exports.getAlumnosInscritosEnMateria = async (req, res) => {
             alumno.horario && alumno.horario.materias.some(materia => materia._id.toString() === materiaId)
         );
 
-        if (!alumnosInscritos || alumnosInscritos.length === 0) {
-            return res.status(404).json({ message: 'No se encontraron alumnos inscritos en esta materia' });
-        }
-
-        // Devolver la lista de alumnos inscritos en la materia
+        // Devolver la lista de alumnos inscritos en la materia (puede estar vacía)
         res.status(200).json({ alumnos: alumnosInscritos });
     } catch (error) {
         console.error('Error al obtener los alumnos inscritos en la materia:', error);

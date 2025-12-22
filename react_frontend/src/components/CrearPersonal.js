@@ -14,7 +14,7 @@ function CrearPersonal() {
     matricula: "",
     correo: "",
     telefono: "",
-    roles: [],
+    roles: "",
     password: ""
   });
   const id_carrera = localStorage.getItem("id_carrera");

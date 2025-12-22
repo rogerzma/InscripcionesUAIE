@@ -43,8 +43,8 @@ function DocenteAlumnos() {
         }
   
         const data = await response.json();
-        // Ordenar los alumnos alfabéticamente por nombre
-        const alumnosOrdenados = data.alumnos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+        // Ordenar los alumnos alfabéticamente por nombre (manejar array vacío)
+        const alumnosOrdenados = (data.alumnos || []).sort((a, b) => a.nombre.localeCompare(b.nombre));
         setAlumnos(alumnosOrdenados);
       } catch (error) {
         console.error("Error al obtener los alumnos:", error);
