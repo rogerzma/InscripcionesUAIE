@@ -129,7 +129,7 @@ const AlumnoListCG = () => {
     };
 
     fetchData();
-  }, [matriculaCord, id_carrera]);
+  }, [matriculaCord, id_carrera, location.state]);
 
   useEffect(() => {
       if (location.state?.reload) {
@@ -176,7 +176,7 @@ const AlumnoListCG = () => {
         nombre: alumno.nombre,
         matricula: alumno.matricula,
         id_carrera: alumno.id_carrera,
-        matriculaCord: matriculaCord
+        matriculaTutor: matriculaCord
       }
     });
   };
