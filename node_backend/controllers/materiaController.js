@@ -373,36 +373,66 @@ exports.subirMateriasCSV = async (req, res) => {
   }
 
   const results = [];
-
-  fs.createReadStream(req.file.path, { encoding: "utf-8" })
-    .pipe(csv())
-    .on("data", (data) => {
-      const cleanedData = {};
-      Object.keys(data).forEach((key) => {
-        const cleanKey = key.replace(/"/g, "").trim();
-        cleanedData[cleanKey] = data[key];
-      });
-
-      results.push(cleanedData);
-    })
-    .on("end", async () => {
-      try {
-        if (results.length === 0) {
-          return res.status(400).json({ message: "El archivo CSV está vacío" });
-        }
-
-        const idsCSV = results.map((materia) => materia.id_materia?.toString().trim()).filter(Boolean);
-
-        await Promise.all(
-          results.map(async (materiaData) => {
-            let { id_materia, id_carrera, nombre, salon, grupo, cupo, docente, 
-                  laboratorio, lunes, martes, miercoles, jueves, viernes, sabado } = materiaData;
+        let columnasValidas = null;
+        
+        fs.createReadStream(req.file.path, { encoding: "utf-8" })
+          .pipe(csv())
+          .on("headers", (headers) => {
+            // Validar columnas obligatorias
+            const requeridas = ["id_materia", "id_carrera", "nombre", "salon", "grupo", "cupo", "docente", "laboratorio"];
+            columnasValidas = requeridas.every(col => headers.includes(col));
+          })
+          .on("data", (data) => {
+            const cleanedData = {};
+            Object.keys(data).forEach((key) => {
+              const cleanKey = key.replace(/"/g, "").trim();
+              cleanedData[cleanKey] = data[key];
+            });
+        
+            results.push(cleanedData);
+          })
+          .on("end", async () => {
+            try {
+              if (!columnasValidas) {
+                fs.unlinkSync(req.file.path);
+                return res.status(400).json({ message: "Error: formato de CSV no valido" });
+              }
+              if (results.length === 0) {
+                return res.status(400).json({ message: "El archivo CSV está vacío" });
+              }
+              const idsCSV = results.map((materia) => materia.id_materia?.toString().trim()).filter(Boolean);
+        
+              await Promise.all(
+                results.map(async (materiaData) => {
+            let {
+              id_materia, id_carrera, nombre, salon, grupo, cupo, docente,
+              laboratorio, lunes, martes, miercoles, jueves, viernes, sabado,
+              semiescolarizada, paridad, semi
+            } = materiaData;
 
             id_materia = id_materia ? id_materia.toString().trim() : null;
+            id_carrera = id_carrera ? id_carrera.trim() : null;
 
             if (!id_materia) {
               console.warn("⚠ Materia sin id_materia:", materiaData);
               return;
+            }
+
+            const esSemiescolarizada = [
+              "ISftwS", "IDsrS", "IEIndS", "ICmpS", "IRMcaS", "IElecS"
+            ].includes(id_carrera);
+
+            // Procesar paridad solo si es semiescolarizada
+            let semiFinal = "";
+            if (esSemiescolarizada) {
+              semiFinal = (paridad || semi || "").toLowerCase();
+              if (semiFinal === "par" || semiFinal === "impar") {
+                semiFinal = semiFinal.charAt(0).toUpperCase() + semiFinal.slice(1);
+              } else {
+                semiFinal = "";
+              }
+            } else {
+              semiFinal = "";
             }
 
             const materiaActual = await Materia.findOne({ id_materia });
@@ -434,7 +464,8 @@ exports.subirMateriasCSV = async (req, res) => {
               {
                 id_materia, id_carrera, nombre,
                 horarios: horariosFinal, salon, grupo, cupo,
-                docente: docenteObjectId, laboratorio: laboratorioBool
+                docente: docenteObjectId, laboratorio: laboratorioBool,
+                semi: semiFinal
               },
               { upsert: true, new: true }
             );
@@ -475,39 +506,44 @@ exports.subirMateriasCSV = async (req, res) => {
     });
 };
 
-
-
 // Exportar materias a CSV
 exports.exportarMateriasCSV = async (req, res) => {
   try {
     const materias = await Materia.find().populate('docente'); // Obtén todas las materias y popula el campo docente
 
-    const formattedData = materias.map((m) => ({
-      id_materia: m.id_materia,
-      id_carrera: m.id_carrera,
-      nombre: m.nombre,
-      salon: m.salon,
-      grupo: m.grupo,
-      cupo: m.cupo,
-      docente: m.docente ? m.docente.personalMatricula : "Sin asignar", // Usar la matrícula del docente
-      laboratorio: m.laboratorio ? "Si" : "No", // <-- Aquí el cambio
-      lunes: m.horarios.lunes || "-", 
-      martes: m.horarios.martes || "-",
-      miercoles: m.horarios.miercoles || "-",
-      jueves: m.horarios.jueves || "-",
-      viernes: m.horarios.viernes || "-",
-      sabado: m.horarios.sabado || "-"
-    }));
+    const formattedData = materias.map((m) => {
+      // Determinar si es semiescolarizada
+      const semiescolarizada = [
+        "ISftwS", "IDsrS", "IEIndS", "ICmpS", "IRMcaS", "IElecS"
+      ].includes(m.id_carrera);
+      return {
+        id_materia: m.id_materia,
+        id_carrera: m.id_carrera,
+        nombre: m.nombre,
+        salon: m.salon,
+        grupo: m.grupo,
+        cupo: m.cupo,
+        docente: m.docente ? m.docente.personalMatricula : "Sin asignar",
+        laboratorio: m.laboratorio ? "Si" : "No",
+        semiescolarizada: semiescolarizada ? "Sí" : "No",
+        paridad: semiescolarizada ? (m.semi || "") : "",
+        lunes: m.horarios.lunes || "-",
+        martes: m.horarios.martes || "-",
+        miercoles: m.horarios.miercoles || "-",
+        jueves: m.horarios.jueves || "-",
+        viernes: m.horarios.viernes || "-",
+        sabado: m.horarios.sabado || "-"
+      };
+    });
 
-    const fields = ["id_materia", "id_carrera", "nombre", "salon", "grupo", "cupo", "docente", 
-                    "laboratorio", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];
-    
+    const fields = [
+      "id_materia", "id_carrera", "nombre", "salon", "grupo", "cupo", "docente",
+      "laboratorio", "semiescolarizada", "paridad",
+      "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"
+    ];
     const json2csvParser = new Parser({ fields });
     let csv = json2csvParser.parse(formattedData);
-
-    // Agregar BOM para que Excel detecte correctamente UTF-8
     csv = '\ufeff' + csv;
-
     res.header("Content-Type", "text/csv; charset=utf-8");
     res.attachment("materias.csv");
     res.send(csv);
@@ -517,7 +553,6 @@ exports.exportarMateriasCSV = async (req, res) => {
 };
 
 //FUNCIONES DE CSV POR CARRERA
-
 // Exportar CSV por carrera
 
 exports.exportarMateriasCSVPorCarrera = async (req, res) => {
@@ -666,27 +701,36 @@ exports.subirMateriasCSVPorCarrera = async (req, res) => {
   }
 
   const results = [];
-
-  fs.createReadStream(req.file.path, { encoding: "utf-8" })
-    .pipe(csv())
-    .on("data", (data) => {
-      const cleanedData = {};
-      Object.keys(data).forEach((key) => {
-        const cleanKey = key.replace(/"/g, "").trim();
-        cleanedData[cleanKey] = data[key];
-      });
-      results.push(cleanedData);
-    })
-    .on("end", async () => {
-      try {
-        if (results.length === 0) {
-          return res.status(400).json({ message: "El archivo CSV está vacío" });
-        }
-
-        const carreraPermitida = req.user?.id_carrera || req.query.id_carrera;
-          if (!carreraPermitida) {
-            return res.status(403).json({ message: "No se pudo determinar la carrera del usuario." });
-          }
+        let columnasValidas = null;
+        
+        fs.createReadStream(req.file.path, { encoding: "utf-8" })
+          .pipe(csv())
+          .on("headers", (headers) => {
+            // Validar columnas obligatorias
+            const requeridas = ["id_materia", "id_carrera", "nombre", "salon", "grupo", "cupo", "docente", "laboratorio"];
+            columnasValidas = requeridas.every(col => headers.includes(col));
+          })
+          .on("data", (data) => {
+            const cleanedData = {};
+            Object.keys(data).forEach((key) => {
+              const cleanKey = key.replace(/"/g, "").trim();
+              cleanedData[cleanKey] = data[key];
+            });
+            results.push(cleanedData);
+          })
+          .on("end", async () => {
+            try {
+              if (!columnasValidas) {
+                fs.unlinkSync(req.file.path);
+                return res.status(400).json({ message: "Error: formato de CSV no valido" });
+              }
+              if (results.length === 0) {
+                return res.status(400).json({ message: "El archivo CSV está vacío" });
+              }
+              const carreraPermitida = req.user?.id_carrera || req.query.id_carrera;
+              if (!carreraPermitida) {
+                return res.status(403).json({ message: "No se pudo determinar la carrera del usuario." });
+              }
 
 
         const carrerasUnicasCSV = [...new Set(results.map(m => m.id_carrera?.trim()))];

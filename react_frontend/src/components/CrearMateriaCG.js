@@ -462,25 +462,25 @@ function CrearMateriaCG() {
             </select>
         </div>
     </div>
-            {mostrarModal && (
-              <div className="modal">
+     </form>
+   </div>
+   <div className="materia-buttons">
+        <button type="submit" className="button">Agregar</button>
+        <button className="button" onClick={() => setMostrarModal(true)}>Subir base de datos de materias</button>
+    </div>
+    </div>
+      {mostrarModal && (
+            <div className="modal">
                 <div className="modal-content">
-                  <h3>Subir base de datos</h3>
-                  <p>Seleccione el archivo a subir:</p>
-                  <input type="file" accept=".csv" onChange={handleFileChange} />
-                  <button onClick={handleSubmitCSV}>Subir CSV</button>
-                  <button onClick={handleDownloadCSV}>Descargar CSV</button>
-                  <button onClick={() => setMostrarModal(false)}>Cerrar</button>
+                    <h3>Subir base de datos</h3>
+                    <p>Seleccione el archivo a subir:</p>
+                    <input type="file" accept=".csv" onChange={handleFileChange} />
+                    <button onClick={handleSubmitCSV}>Subir CSV</button>
+                    <button onClick={handleDownloadCSV}>Descargar CSV</button>
+                    <button onClick={() => setMostrarModal(false)}>Cerrar</button>
                 </div>
-              </div>
-            )}
-            <div className="materia-buttons">
-              <button type="submit" className="button">Agregar</button>
-              <button className="button" onClick={() => setMostrarModal(true)}>Subir base de datos de materias</button>
             </div>
-          </form>
-        </div>
-      </div>
+        )}
     </div>
   );
 }
