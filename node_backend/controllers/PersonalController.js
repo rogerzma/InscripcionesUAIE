@@ -458,11 +458,10 @@ exports.subirPersonalCSV = async (req, res) => {
           matricula = matricula.trim();
 
           // Validar que no haya más de un coordinador por carrera
-          if (roles.includes("C") && id_carrera && matricula.match(/^C\d{4}$/)) {
+          if (roles.includes("C") && id_carrera && matricula.match(/^C\\d{4}$/)) {
             const coordinadorExistente = await Coordinadores.findOne({ id_carrera });
             if (coordinadorExistente && coordinadorExistente.personalMatricula !== matricula) {
-              // Si ya existe otro coordinador para esa carrera, NO crear el usuario ni el documento
-              continue; // Salta este registro
+              continue;
             }
           }
 
@@ -475,47 +474,69 @@ exports.subirPersonalCSV = async (req, res) => {
             roles = roles.split(",").map(r => r.trim().toUpperCase());
           }
 
-          // Hashear la contraseña antes de guardar
-          const hashedPassword = await bcrypt.hash(password, 10);
+          // Buscar si ya existe el usuario
+          const personalExistente = await Personal.findOne({ matricula });
+          let passwordFinal = password;
+
+          if (personalExistente) {
+            if (!password || password.trim() === "") {
+              passwordFinal = personalExistente.password;
+            } else {
+              if (password !== personalExistente.password) {
+                if (
+                  !password.startsWith("$2a$") &&
+                  !password.startsWith("$2b$") &&
+                  !password.startsWith("$2y$")
+                ) {
+                  passwordFinal = await bcrypt.hash(password, 10);
+                } else {
+                  passwordFinal = password;
+                }
+              } else {
+                passwordFinal = personalExistente.password;
+              }
+            }
+          } else {
+            if (
+              !password.startsWith("$2a$") &&
+              !password.startsWith("$2b$") &&
+              !password.startsWith("$2y$")
+            ) {
+              passwordFinal = await bcrypt.hash(password, 10);
+            }
+          }
 
           // Actualizar o crear personal
           await Personal.findOneAndUpdate(
             { matricula },
-            { nombre, telefono, correo, roles, password: hashedPassword },
+            { nombre, telefono, correo, roles, password: passwordFinal },
             { upsert: true, new: true }
           );
 
-          // Crear documentos secundarios por rol
+          // Crear documentos secundarios por rol SOLO si no existen
           if (roles.includes("D")) {
-            await Docentes.findOneAndUpdate(
-              { personalMatricula: matricula },
-              { personalMatricula: matricula },
-              { upsert: true, new: true }
-            );
+            const existeDocente = await Docentes.findOne({ personalMatricula: matricula });
+            if (!existeDocente) {
+              await Docentes.create({ personalMatricula: matricula, materias: [], alumnos: [] });
+            }
           }
-
           if (roles.includes("T")) {
-            await Tutores.findOneAndUpdate(
-              { personalMatricula: matricula },
-              { personalMatricula: matricula },
-              { upsert: true, new: true }
-            );
+            const existeTutor = await Tutores.findOne({ personalMatricula: matricula });
+            if (!existeTutor) {
+              await Tutores.create({ personalMatricula: matricula, alumnos: [] });
+            }
           }
-
           if (roles.includes("C") && id_carrera && id_carrera.trim()) {
-            await Coordinadores.findOneAndUpdate(
-              { personalMatricula: matricula },
-              { personalMatricula: matricula, id_carrera: id_carrera.trim() },
-              { upsert: true, new: true }
-            );
+            const existeCoord = await Coordinadores.findOne({ personalMatricula: matricula, id_carrera: id_carrera.trim() });
+            if (!existeCoord) {
+              await Coordinadores.create({ personalMatricula: matricula, id_carrera: id_carrera.trim(), alumnos: [] });
+            }
           }
-
           if (roles.includes("A") && id_carrera && id_carrera.trim()) {
-            await Administradores.findOneAndUpdate(
-              { personalMatricula: matricula },
-              { personalMatricula: matricula, id_carrera: id_carrera.trim() },
-              { upsert: true, new: true }
-            );
+            const existeAdmin = await Administradores.findOne({ personalMatricula: matricula, id_carrera: id_carrera.trim() });
+            if (!existeAdmin) {
+              await Administradores.create({ personalMatricula: matricula, id_carrera: id_carrera.trim() });
+            }
           }
         }
 
@@ -822,51 +843,71 @@ exports.exportarPersonalCSV = async (req, res) => {
             results.map(async (personalData) => {
               let { matricula, nombre, password, roles, correo, telefono } = personalData;
               matricula = matricula ? matricula.toString().trim() : null;
-
               if (!matricula || !roles) return;
 
               if (typeof roles === "string") {
                 roles = roles.split(",").map((r) => r.trim().toUpperCase());
               }
 
+              // Buscar si ya existe el usuario
+              const personalExistente = await Personal.findOne({ matricula });
+              let passwordFinal = password;
+
+              // Si existe y no se envió una nueva contraseña, mantener la actual
+              if (personalExistente) {
+                if (!password || password.trim() === "") {
+                  passwordFinal = personalExistente.password;
+                } else {
+                  // Si la contraseña es diferente, verificar si ya está hasheada
+                  if (password !== personalExistente.password) {
+                    // Si la nueva contraseña no está hasheada, hashearla
+                    if (!password.startsWith("$2a$") && !password.startsWith("$2b$") && !password.startsWith("$2y$")) {
+                      passwordFinal = await bcrypt.hash(password, 10);
+                    } else {
+                      passwordFinal = password;
+                    }
+                  } else {
+                    passwordFinal = personalExistente.password;
+                  }
+                }
+              } else {
+                // Si es nuevo usuario, hashear la contraseña si no está hasheada
+                if (!password.startsWith("$2a$") && !password.startsWith("$2b$") && !password.startsWith("$2y$")) {
+                  passwordFinal = await bcrypt.hash(password, 10);
+                }
+              }
+
               // Crear o actualizar Personal
               const personalActualizado = await Personal.findOneAndUpdate(
                 { matricula },
-                { nombre, telefono, correo, roles, password },
+                { nombre, telefono, correo, roles, password: passwordFinal },
                 { upsert: true, new: true }
               );
 
-              // Asignar roles
+              // Asignar roles SOLO si no existe el documento correspondiente
               if (roles.includes("D")) {
-                await Docentes.findOneAndUpdate(
-                  { personalMatricula: matricula },
-                  { $set: { personalMatricula: matricula } },
-                  { upsert: true, new: true }
-                );
+                const existeDocente = await Docentes.findOne({ personalMatricula: matricula });
+                if (!existeDocente) {
+                  await Docentes.create({ personalMatricula: matricula, materias: [], alumnos: [] });
+                }
               }
-
               if (roles.includes("T")) {
-                await Tutores.findOneAndUpdate(
-                  { personalMatricula: matricula },
-                  { $set: { personalMatricula: matricula } },
-                  { upsert: true, new: true }
-                );
+                const existeTutor = await Tutores.findOne({ personalMatricula: matricula });
+                if (!existeTutor) {
+                  await Tutores.create({ personalMatricula: matricula, alumnos: [] });
+                }
               }
-
               if (roles.includes("C")) {
-                await Coordinadores.findOneAndUpdate(
-                  { personalMatricula: matricula },
-                  { $set: { personalMatricula: matricula, id_carrera } },
-                  { upsert: true, new: true }
-                );
+                const existeCoord = await Coordinadores.findOne({ personalMatricula: matricula, id_carrera });
+                if (!existeCoord) {
+                  await Coordinadores.create({ personalMatricula: matricula, id_carrera, alumnos: [] });
+                }
               }
-
               if (roles.includes("A")) {
-                await Administradores.findOneAndUpdate(
-                  { personalMatricula: matricula },
-                  { $set: { personalMatricula: matricula, id_carrera } },
-                  { upsert: true, new: true }
-                );
+                const existeAdmin = await Administradores.findOne({ personalMatricula: matricula, id_carrera });
+                if (!existeAdmin) {
+                  await Administradores.create({ personalMatricula: matricula, id_carrera });
+                }
               }
             })
           );
