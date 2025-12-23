@@ -444,9 +444,15 @@ exports.subirPersonalCSV = async (req, res) => {
   }
 
   const results = [];
+  let columnasValidas = null;
 
   fs.createReadStream(req.file.path)
     .pipe(csv())
+    .on('headers', (headers) => {
+      // Validar columnas obligatorias
+      const requeridas = ["matricula", "nombre", "password", "roles", "telefono", "correo"];
+      columnasValidas = requeridas.every(col => headers.includes(col));
+    })
     .on('data', (data) => {
       const cleanedData = {};
       Object.keys(data).forEach((key) => {
@@ -456,6 +462,10 @@ exports.subirPersonalCSV = async (req, res) => {
     })
     .on('end', async () => {
       try {
+        if (!columnasValidas) {
+          fs.unlinkSync(req.file.path);
+          return res.status(400).json({ message: "Error: formato de CSV no valido" });
+        }
         const matriculasCSV = results.map((p) => p.matricula?.trim()).filter(Boolean);
 
         // Obtener al coordinador general actual para protegerlo completamente
@@ -820,20 +830,30 @@ exports.exportarPersonalCSV = async (req, res) => {
     const matriculaActual = req.headers["x-matricula-coordinador"] || req.user?.matricula;
 
     const results = [];
+    let columnasValidas = null;
     fs.createReadStream(req.file.path, { encoding: "utf-8" })
       .pipe(csv())
+      .on("headers", (headers) => {
+        // Validar columnas obligatorias
+        const requeridas = ["matricula", "nombre", "password", "roles", "telefono", "correo"];
+        columnasValidas = requeridas.every(col => headers.includes(col));
+      })
       .on("data", (data) => {
         const cleanedData = {};
         Object.keys(data).forEach((key) => {
           const cleanKey = key.replace(/"/g, "").trim();
           cleanedData[cleanKey] = data[key];
         });
-
         results.push(cleanedData);
       })
       .on("end", async () => {
         try {
+          if (!columnasValidas) {
+            fs.unlinkSync(req.file.path);
+            return res.status(400).json({ message: "Error: formato de CSV no valido" });
+          }
           if (results.length === 0) {
+            fs.unlinkSync(req.file.path);
             return res.status(400).json({ message: "El archivo CSV está vacío" });
           }
 

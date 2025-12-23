@@ -95,7 +95,8 @@ useEffect(() => {
       setMostrarModal(false); // Cierra el modal después de subir el archivo
     } catch (error) {
       console.error("Error al subir el archivo CSV:", error);
-      toast.error("Hubo un error al actualizar la base de datos");
+      const errorMsg = error.response?.data?.message || "Hubo un error al actualizar la base de datos";
+      toast.error(errorMsg);
     }
   };
 

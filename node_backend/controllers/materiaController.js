@@ -855,32 +855,33 @@ exports.subirMateriasCSVPorCarrera = async (req, res) => {
   }
 
   const results = [];
-        let columnasValidas = null;
-        
-        fs.createReadStream(req.file.path, { encoding: "utf-8" })
-          .pipe(csv())
-          .on("headers", (headers) => {
-            // Validar columnas obligatorias
-            const requeridas = ["id_materia", "id_carrera", "nombre", "salon", "grupo", "cupo", "docente", "laboratorio"];
-            columnasValidas = requeridas.every(col => headers.includes(col));
-          })
-          .on("data", (data) => {
-            const cleanedData = {};
-            Object.keys(data).forEach((key) => {
-              const cleanKey = key.replace(/"/g, "").trim();
-              cleanedData[cleanKey] = data[key];
-            });
-            results.push(cleanedData);
-          })
-          .on("end", async () => {
-            try {
-              if (!columnasValidas) {
-                fs.unlinkSync(req.file.path);
-                return res.status(400).json({ message: "Error: formato de CSV no valido" });
-              }
-              if (results.length === 0) {
-                return res.status(400).json({ message: "El archivo CSV está vacío" });
-              }
+  let columnasValidas = null;
+
+  fs.createReadStream(req.file.path, { encoding: "utf-8" })
+    .pipe(csv())
+    .on("headers", (headers) => {
+      // Validar columnas obligatorias igual que en subirMateriasCSV
+      const requeridas = ["id_materia", "id_carrera", "nombre", "salon", "grupo", "cupo", "docente", "laboratorio"];
+      columnasValidas = requeridas.every(col => headers.includes(col));
+    })
+    .on("data", (data) => {
+      const cleanedData = {};
+      Object.keys(data).forEach((key) => {
+        const cleanKey = key.replace(/"/g, "").trim();
+        cleanedData[cleanKey] = data[key];
+      });
+      results.push(cleanedData);
+    })
+    .on("end", async () => {
+      try {
+        if (!columnasValidas) {
+          fs.unlinkSync(req.file.path);
+          return res.status(400).json({ message: "Error: formato de CSV no valido" });
+        }
+        if (results.length === 0) {
+          fs.unlinkSync(req.file.path);
+          return res.status(400).json({ message: "El archivo CSV está vacío" });
+        }
               const carreraPermitida = req.user?.id_carrera || req.query.id_carrera;
               if (!carreraPermitida) {
                 return res.status(403).json({ message: "No se pudo determinar la carrera del usuario." });

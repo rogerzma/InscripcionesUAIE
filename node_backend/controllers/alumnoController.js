@@ -796,6 +796,7 @@ exports.subirAlumnosCSV = async (req, res) => {
 
   const results = [];
   const alumnosRechazados = [];
+  let columnasValidas = null;
 
   // Carreras válidas (debe coincidir con las permitidas en frontend)
   const carrerasPermitidas = {
@@ -815,6 +816,11 @@ exports.subirAlumnosCSV = async (req, res) => {
 
   fs.createReadStream(req.file.path, { encoding: "utf-8" })
     .pipe(csv())
+    .on("headers", (headers) => {
+      // Validar columnas obligatorias
+      const requeridas = ["matricula", "nombre", "id_carrera", "telefono", "correo"];
+      columnasValidas = requeridas.every(col => headers.includes(col));
+    })
     .on("data", (data) => {
       const cleanedData = {};
       Object.keys(data).forEach((key) => {
@@ -824,6 +830,10 @@ exports.subirAlumnosCSV = async (req, res) => {
     })
     .on("end", async () => {
       try {
+        if (!columnasValidas) {
+          fs.unlinkSync(req.file.path);
+          return res.status(400).json({ message: "Error: formato de CSV no valido" });
+        }
         if (results.length === 0) {
           fs.unlinkSync(req.file.path);
           return res.status(400).json({ message: "El archivo CSV está vacío" });
@@ -1128,9 +1138,15 @@ exports.subirAlumnosCSVPorCarrera = async (req, res) => {
   if (!id_carrera) return res.status(400).json({ message: "Se requiere el ID de la carrera en la URL" });
 
   const results = [];
+  let columnasValidas = null;
 
   fs.createReadStream(req.file.path, { encoding: "utf-8" })
     .pipe(csv())
+    .on("headers", (headers) => {
+      // Validar columnas obligatorias
+      const requeridas = ["matricula", "nombre", "telefono", "correo"];
+      columnasValidas = requeridas.every(col => headers.includes(col));
+    })
     .on("data", (data) => {
       const cleanedData = {};
       Object.keys(data).forEach((key) => {
@@ -1141,7 +1157,14 @@ exports.subirAlumnosCSVPorCarrera = async (req, res) => {
     })
     .on("end", async () => {
       try {
-        if (results.length === 0) return res.status(400).json({ message: "El archivo CSV está vacío" });
+        if (!columnasValidas) {
+          fs.unlinkSync(req.file.path);
+          return res.status(400).json({ message: "Error: formato de CSV no valido" });
+        }
+        if (results.length === 0) {
+          fs.unlinkSync(req.file.path);
+          return res.status(400).json({ message: "El archivo CSV está vacío" });
+        }
 
 
         const matriculasCSV = results.map((alumno) => alumno.matricula?.toString().trim()).filter(Boolean);
