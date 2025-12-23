@@ -2,7 +2,7 @@
 
 ## 📚 Documentacion Completa Generada
 
-Este documento resume toda la documentacion tecnica creada para el proyecto InscripcionesUAIE.
+Este documento resume toda la documentacion tecnica creada para el proyecto InscripcionesUAIE resumida en el archivo:"\docs".
 
 ---
 
