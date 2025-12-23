@@ -1011,3 +1011,177 @@ exports.getPassword = async (req, res) => {
     res.status(500).json({ message: 'Error al recuperar la contraseña', error });
   }
   }
+
+// Obtener personal paginado (para CG/AG)
+exports.getPersonalPaginado = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+
+    const skip = (page - 1) * limit;
+
+    // Construir filtro - excluir CG y AG
+    let condiciones = [{ roles: { $nin: ['CG', 'AG'] } }];
+
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      condiciones.push({
+        $or: [
+          { matricula: searchRegex },
+          { nombre: searchRegex },
+          { correo: searchRegex },
+          { roles: searchRegex }
+        ]
+      });
+    }
+
+    const filtro = { $and: condiciones };
+
+    const total = await Personal.countDocuments(filtro);
+    const totalPages = Math.ceil(total / limit);
+
+    const personal = await Personal.find(filtro)
+      .skip(skip)
+      .limit(limit)
+      .sort({ matricula: 1 });
+
+    res.status(200).json({
+      personal,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener personal paginado:', error);
+    res.status(500).json({ message: 'Error al obtener personal paginado', error });
+  }
+};
+
+// Obtener personal paginado por carrera (para Coordinador/Admin)
+exports.getPersonalByCarreraPaginado = async (req, res) => {
+  try {
+    const { matricula } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+
+    const skip = (page - 1) * limit;
+
+    // Buscar el coordinador o administrador y obtener el id_carrera
+    const coordinador = await Coordinadores.findOne({ personalMatricula: matricula }).select("id_carrera");
+    const administrador = await Administradores.findOne({ personalMatricula: matricula }).select("id_carrera");
+
+    if (!coordinador && !administrador) {
+      return res.status(404).json({ message: "Coordinador o Administrador no encontrado" });
+    }
+
+    const id_carrera = coordinador ? coordinador.id_carrera : administrador.id_carrera;
+
+    // Buscar docentes, tutores, coordinadores y administradores de la carrera
+    const docentes = await Docentes.find({
+      $or: [
+        { materias: { $exists: true, $not: { $size: 0 } } },
+        { alumnos: { $exists: true, $not: { $size: 0 } } }
+      ]
+    }).select("personalMatricula materias alumnos");
+
+    const docentesFiltrados = [];
+    for (const docente of docentes) {
+      let tieneMateriaCarrera = false;
+      let tieneAlumnoCarrera = false;
+
+      if (docente.materias && docente.materias.length > 0) {
+        const materias = await Materia.find({ _id: { $in: docente.materias }, id_carrera });
+        tieneMateriaCarrera = materias.length > 0;
+      }
+      if (docente.alumnos && docente.alumnos.length > 0) {
+        const alumnos = await Alumno.find({ _id: { $in: docente.alumnos }, id_carrera });
+        tieneAlumnoCarrera = alumnos.length > 0;
+      }
+      if (tieneMateriaCarrera || tieneAlumnoCarrera) {
+        docentesFiltrados.push(docente.personalMatricula);
+      }
+    }
+
+    const tutores = await Tutores.find({
+      alumnos: { $exists: true, $not: { $size: 0 } }
+    }).select("personalMatricula alumnos");
+
+    const tutoresFiltrados = [];
+    for (const tutor of tutores) {
+      if (tutor.alumnos && tutor.alumnos.length > 0) {
+        const alumnos = await Alumno.find({ _id: { $in: tutor.alumnos }, id_carrera });
+        if (alumnos.length > 0) {
+          tutoresFiltrados.push(tutor.personalMatricula);
+        }
+      }
+    }
+
+    const [coordinadores, administradores] = await Promise.all([
+      Coordinadores.find({ id_carrera }).select("personalMatricula"),
+      Administradores.find({ id_carrera }).select("personalMatricula")
+    ]);
+
+    const personalMatriculasSet = new Set([
+      ...docentesFiltrados,
+      ...tutoresFiltrados,
+      ...coordinadores.map(c => c.personalMatricula),
+      ...administradores.map(a => a.personalMatricula)
+    ]);
+
+    const personalMatriculas = Array.from(personalMatriculasSet);
+
+    if (personalMatriculas.length === 0) {
+      return res.status(200).json({
+        personal: [],
+        pagination: { page, limit, total: 0, totalPages: 0, hasNextPage: false, hasPrevPage: false }
+      });
+    }
+
+    // Construir filtro con búsqueda
+    let condiciones = [{ matricula: { $in: personalMatriculas } }];
+
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      condiciones.push({
+        $or: [
+          { matricula: searchRegex },
+          { nombre: searchRegex },
+          { correo: searchRegex },
+          { roles: searchRegex }
+        ]
+      });
+    }
+
+    const filtro = { $and: condiciones };
+
+    const total = await Personal.countDocuments(filtro);
+    const totalPages = Math.ceil(total / limit);
+
+    const personal = await Personal.find(filtro)
+      .skip(skip)
+      .limit(limit)
+      .sort({ matricula: 1 });
+
+    res.status(200).json({
+      personal,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener personal paginado por carrera:', error);
+    res.status(500).json({ message: 'Error al obtener personal paginado', error });
+  }
+};

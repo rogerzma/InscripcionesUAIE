@@ -22,6 +22,10 @@ router.post('/', materiaController.createMateria);
 // Ruta para obtener todas las materias
 router.get('/', materiaController.getMaterias);
 
+// Rutas paginadas (ANTES de las rutas con parámetros dinámicos)
+router.get('/paginadas', materiaController.getMateriasPaginadas);
+router.get('/carrera-paginadas/:id_carrera', materiaController.getMateriasByCarreraPaginadas);
+
 // Ruta para obtener una materia por su ID
 router.get('/:id', materiaController.getMateriaById);
 

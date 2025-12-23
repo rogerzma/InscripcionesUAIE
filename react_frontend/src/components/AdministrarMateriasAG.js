@@ -1,42 +1,128 @@
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
-import apiClient from '../utils/axiosConfig'; // Importar la configuración de axios
+import apiClient from '../utils/axiosConfig';
 import "react-toastify/dist/ReactToastify.css";
 import "./AdministrarMaterias.css";
 
 const AdministrarMateriasAG = () => {
   const [materias, setMaterias] = useState([]);
   const [docentes, setDocentes] = useState([]);
-  const [searchTerm, setSearchTerm] = useState(""); // Filtro de búsqueda
+  const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
   const token = localStorage.getItem("token");
-  const [mostrarModal, setMostrarModal] = useState(false);
-  const [materiaAEliminar, setMateriaAEliminar] = useState(null);
   const API_URL = process.env.REACT_APP_API_URL;
-
-  const id_carrera = localStorage.getItem("id_carrera");
   const navigate = useNavigate();
+  const location = useLocation();
 
+  // Estados para paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPrevPage: false
+  });
+
+  // Debounce para búsqueda
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Efecto para debounce de búsqueda
   useEffect(() => {
-    fetchMaterias();
-    fetchDocentes();
-  }, []);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-  // Cargar materias desde el backend
-  const fetchMaterias = async () => {
-    setLoading(true);
+  // Función para obtener materias paginadas
+  const fetchMateriasPaginadas = useCallback(async () => {
     try {
-      const response = await apiClient.get(
-        `${API_URL}/api/materias`
-      );
-      setMaterias(response.data);
+      setLoading(true);
+      const response = await apiClient.get(`${API_URL}/api/materias/paginadas`, {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search: debouncedSearch,
+          tipoCarrera: "todas"
+        }
+      });
+
+      const { materias: materiasData, pagination: paginationData } = response.data;
+      setMaterias(materiasData);
+      setPagination(paginationData);
     } catch (error) {
       console.error("Error al obtener datos de materias:", error);
+      toast.error("Error al cargar las materias");
     } finally {
       setLoading(false);
     }
+  }, [API_URL, currentPage, itemsPerPage, debouncedSearch]);
+
+  useEffect(() => {
+    fetchMateriasPaginadas();
+    fetchDocentes();
+  }, [fetchMateriasPaginadas]);
+
+  useEffect(() => {
+    if (location.state?.reload) {
+      window.history.replaceState({}, document.title);
+      fetchMateriasPaginadas();
+    }
+  }, [location.state, fetchMateriasPaginadas]);
+
+  // Restaurar estado al volver
+  useEffect(() => {
+    const estadoGuardado = sessionStorage.getItem("vistaMateriasAG");
+    if (estadoGuardado && !location.state?.reload) {
+      const { searchTerm: savedSearch, currentPage: savedPage, itemsPerPage: savedLimit, scrollY } = JSON.parse(estadoGuardado);
+      setSearchTerm(savedSearch || "");
+      setCurrentPage(savedPage || 1);
+      setItemsPerPage(savedLimit || 10);
+      setTimeout(() => window.scrollTo(0, scrollY || 0), 100);
+      sessionStorage.removeItem("vistaMateriasAG");
+    }
+  }, []);
+
+  const guardarEstadoVista = () => {
+    sessionStorage.setItem("vistaMateriasAG", JSON.stringify({
+      searchTerm,
+      currentPage,
+      itemsPerPage,
+      scrollY: window.scrollY
+    }));
+  };
+
+  // Funciones de paginación
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo(0, 0);
+    }
+  };
+
+  const handleItemsPerPageChange = (e) => {
+    const newLimit = parseInt(e.target.value);
+    setItemsPerPage(newLimit);
+    setCurrentPage(1);
+  };
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxPagesToShow = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = Math.min(pagination.totalPages, startPage + maxPagesToShow - 1);
+
+    if (endPage - startPage + 1 < maxPagesToShow) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
   };
 
   // Cargar docentes desde el backend
@@ -55,9 +141,9 @@ const AdministrarMateriasAG = () => {
   };
 
   const handleDownloadCSV = async () => {
-    const ids = materiasFiltradas.map(m => m._id);
+    const ids = materias.map(m => m._id);
     if (ids.length === 0) {
-      toast.error("No hay materias filtradas para exportar.");
+      toast.error("No hay materias para exportar.");
       return;
     }
 
@@ -71,12 +157,12 @@ const AdministrarMateriasAG = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", "materias_filtradas.csv");
+      link.setAttribute("download", "materias.csv");
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     } catch (error) {
-      console.error("❌ Error al descargar materias filtradas:", error);
+      console.error("Error al descargar materias:", error);
       toast.error("No se pudo exportar el CSV.");
     }
   };
@@ -84,17 +170,17 @@ const AdministrarMateriasAG = () => {
   // Función para formatear el nombre de la materia
   const formatUrl = (nombre) => {
     return nombre
-      .normalize("NFD") // Normaliza el texto para separar los acentos
-      .replace(/[\u0300-\u036f]/g, "") // Elimina los acentos
-      .toLowerCase() // Convierte a minúsculas
-      .replace(/[^a-z0-9\s]/g, "") // Elimina caracteres especiales
-      .trim() // Elimina espacios al inicio y al final
-      .replace(/\s+/g, "-"); // Reemplaza espacios por guiones
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .trim()
+      .replace(/\s+/g, "-");
   };
-  
 
   const handleListaAlumnos = (materia) => {
-    const materiaUrl = formatUrl(materia.nombre); // Formatea el nombre de la materia
+    guardarEstadoVista();
+    const materiaUrl = formatUrl(materia.nombre);
     navigate(`/docente/materias/${materiaUrl}/lista-alumnos`, {
       state: {
         nombre: docentes.nombre,
@@ -108,19 +194,6 @@ const AdministrarMateriasAG = () => {
   if (loading) {
     return <div className="loading">Cargando información de materias...</div>;
   }
-
-  // Filtrar materias por búsqueda
-  const materiasFiltradas = materias.filter((materia) =>
-    [
-      materia.salon,
-      materia.nombre,
-      materia.grupo,
-      materia.id_carrera,
-      getDocenteNombre(materia),
-    ].some((campo) => campo.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  
 
   return (
     <div className="admin-materias">
@@ -139,7 +212,28 @@ const AdministrarMateriasAG = () => {
           className="search-bar"
         />
 
-        {materiasFiltradas.length > 0 ? (
+        {/* Controles de paginación superiores */}
+        <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label htmlFor="itemsPerPage">Mostrar:</label>
+            <select
+              id="itemsPerPage"
+              value={itemsPerPage}
+              onChange={handleItemsPerPageChange}
+              style={{ padding: '5px 10px', borderRadius: '4px', border: '1px solid #ccc' }}
+            >
+              {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <span>por página</span>
+          </div>
+          <div style={{ color: '#666' }}>
+            Mostrando {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, pagination.total)} de {pagination.total} materias
+          </div>
+        </div>
+
+        {materias.length > 0 ? (
           <div className="scrollable-table">
             <table className="materia-table">
               <thead>
@@ -160,14 +254,14 @@ const AdministrarMateriasAG = () => {
                 </tr>
               </thead>
               <tbody>
-                {materiasFiltradas.map((materia) => (
+                {materias.map((materia) => (
                   <tr key={materia._id}>
                     <td>{materia.id_carrera}</td>
                     <td>{materia.grupo}</td>
                     <td>{materia.salon}</td>
                     <td>{materia.cupo}</td>
                     <td>{materia.nombre}</td>
-                    <td c>{getDocenteNombre(materia)}</td>
+                    <td>{getDocenteNombre(materia)}</td>
                     <td>{materia.laboratorio ? "Sí" : "No"}</td>
                     <td>{materia.horarios.lunes || "-"}</td>
                     <td>{materia.horarios.martes || "-"}</td>
@@ -184,6 +278,39 @@ const AdministrarMateriasAG = () => {
           <p className="no-alumnos-message">No se encontraron resultados.</p>
         )}
 
+        {/* Controles de paginación inferiores */}
+        {pagination.totalPages > 1 && (
+          <div className="pagination" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', marginTop: '20px', flexWrap: 'wrap' }}>
+            <button onClick={() => handlePageChange(1)} disabled={!pagination.hasPrevPage} style={{ padding: '8px 12px', cursor: pagination.hasPrevPage ? 'pointer' : 'not-allowed', opacity: pagination.hasPrevPage ? 1 : 0.5 }}>
+              {'<<'}
+            </button>
+            <button onClick={() => handlePageChange(currentPage - 1)} disabled={!pagination.hasPrevPage} style={{ padding: '8px 12px', cursor: pagination.hasPrevPage ? 'pointer' : 'not-allowed', opacity: pagination.hasPrevPage ? 1 : 0.5 }}>
+              {'<'}
+            </button>
+            {getPageNumbers().map(pageNum => (
+              <button
+                key={pageNum}
+                onClick={() => handlePageChange(pageNum)}
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: pageNum === currentPage ? '#1976d2' : '#fff',
+                  color: pageNum === currentPage ? '#fff' : '#333',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                {pageNum}
+              </button>
+            ))}
+            <button onClick={() => handlePageChange(currentPage + 1)} disabled={!pagination.hasNextPage} style={{ padding: '8px 12px', cursor: pagination.hasNextPage ? 'pointer' : 'not-allowed', opacity: pagination.hasNextPage ? 1 : 0.5 }}>
+              {'>'}
+            </button>
+            <button onClick={() => handlePageChange(pagination.totalPages)} disabled={!pagination.hasNextPage} style={{ padding: '8px 12px', cursor: pagination.hasNextPage ? 'pointer' : 'not-allowed', opacity: pagination.hasNextPage ? 1 : 0.5 }}>
+              {'>>'}
+            </button>
+          </div>
+        )}
 
         <div className="add-delete-buttons">
           <button onClick={handleDownloadCSV}>Descargar CSV de materias</button>

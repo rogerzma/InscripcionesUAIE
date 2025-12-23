@@ -23,7 +23,7 @@ router.post('/alumno/login', async (req, res) => {
     const tieneHorario = alumno.horario !== null;
     const validacionCompleta = alumno.horario?.validacionCompleta || false;
 
-    const token = jwt.sign({ id: alumno._id }, process.env.JWT_SECRET, { expiresIn: '30m' });
+    const token = jwt.sign({ id: alumno._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
     
     return res.json({ 
       mensaje: 'Inicio de sesión exitoso', 
@@ -63,7 +63,7 @@ router.post('/personal/login', async (req, res) => {
     }
 
     // Crear token válido con JWT
-    const token = jwt.sign({ id: personal._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign({ id: personal._id }, process.env.JWT_SECRET, { expiresIn: '24h' });
 
     // Buscar en los diferentes modelos para obtener el id_carrera
     let id_carrera = null;

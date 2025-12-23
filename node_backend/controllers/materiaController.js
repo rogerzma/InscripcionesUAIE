@@ -694,6 +694,160 @@ exports.exportarCSVPorCarreraFiltrado = async (req, res) => {
   }
 };
 
+// Obtener materias paginadas (para CG/AG)
+exports.getMateriasPaginadas = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const tipoCarrera = req.query.tipoCarrera || 'todas'; // 'todas', 'escolarizada', 'semiescolarizada'
+
+    const skip = (page - 1) * limit;
+
+    // Carreras semiescolarizadas
+    const carrerasSemiescolarizadas = ['ISftwS', 'IDsrS', 'IEIndS', 'ICmpS', 'IRMcaS', 'IElecS'];
+
+    // Construir filtro
+    let condiciones = [];
+
+    // Filtro por tipo de carrera
+    if (tipoCarrera === 'escolarizada') {
+      condiciones.push({ id_carrera: { $nin: carrerasSemiescolarizadas } });
+    } else if (tipoCarrera === 'semiescolarizada') {
+      condiciones.push({ id_carrera: { $in: carrerasSemiescolarizadas } });
+    }
+
+    // Filtro de búsqueda
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      condiciones.push({
+        $or: [
+          { nombre: searchRegex },
+          { grupo: searchRegex },
+          { salon: searchRegex },
+          { id_carrera: searchRegex }
+        ]
+      });
+    }
+
+    const filtro = condiciones.length > 0 ? { $and: condiciones } : {};
+
+    const total = await Materia.countDocuments(filtro);
+    const totalPages = Math.ceil(total / limit);
+
+    const materias = await Materia.find(filtro)
+      .skip(skip)
+      .limit(limit)
+      .sort({ id_carrera: 1, nombre: 1 });
+
+    // Agregar nombre del docente
+    const materiasConDocente = await Promise.all(
+      materias.map(async (materia) => {
+        if (!materia.docente) {
+          return { ...materia.toObject(), docenteNombre: "Sin asignar" };
+        }
+        const docente = await Docentes.findById(materia.docente);
+        if (!docente) {
+          return { ...materia.toObject(), docenteNombre: "Sin asignar" };
+        }
+        const personal = await Personal.findOne({ matricula: docente.personalMatricula });
+        return {
+          ...materia.toObject(),
+          docenteNombre: personal ? personal.nombre : "Sin asignar",
+        };
+      })
+    );
+
+    res.status(200).json({
+      materias: materiasConDocente,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener materias paginadas:', error);
+    res.status(500).json({ message: 'Error al obtener materias paginadas', error });
+  }
+};
+
+// Obtener materias paginadas por carrera (para Coordinador/Admin)
+exports.getMateriasByCarreraPaginadas = async (req, res) => {
+  try {
+    const { id_carrera } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+
+    const skip = (page - 1) * limit;
+
+    if (!carrerasPermitidas.includes(id_carrera)) {
+      return res.status(400).json({ message: "ID de carrera no válido" });
+    }
+
+    // Construir filtro
+    let condiciones = [{ id_carrera: id_carrera }];
+
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      condiciones.push({
+        $or: [
+          { nombre: searchRegex },
+          { grupo: searchRegex },
+          { salon: searchRegex }
+        ]
+      });
+    }
+
+    const filtro = { $and: condiciones };
+
+    const total = await Materia.countDocuments(filtro);
+    const totalPages = Math.ceil(total / limit);
+
+    const materias = await Materia.find(filtro)
+      .skip(skip)
+      .limit(limit)
+      .sort({ nombre: 1 });
+
+    // Agregar nombre del docente
+    const materiasConDocente = await Promise.all(
+      materias.map(async (materia) => {
+        if (!materia.docente) {
+          return { ...materia.toObject(), docenteNombre: "Sin asignar" };
+        }
+        const docente = await Docentes.findById(materia.docente);
+        if (!docente) {
+          return { ...materia.toObject(), docenteNombre: "Sin asignar" };
+        }
+        const personal = await Personal.findOne({ matricula: docente.personalMatricula });
+        return {
+          ...materia.toObject(),
+          docenteNombre: personal ? personal.nombre : "Sin asignar",
+        };
+      })
+    );
+
+    res.status(200).json({
+      materias: materiasConDocente,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener materias paginadas por carrera:', error);
+    res.status(500).json({ message: 'Error al obtener materias paginadas', error });
+  }
+};
+
 //Subir CSV por carrera
 exports.subirMateriasCSVPorCarrera = async (req, res) => {
   if (!req.file) {

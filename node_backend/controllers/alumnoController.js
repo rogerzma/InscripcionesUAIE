@@ -156,6 +156,191 @@ exports.getAlumnos = async (req, res) => {
     res.status(500).json({ message: 'Error al obtener alumnos', error });
   }
 };
+
+// Obtener alumnos paginados (para coordinador general)
+exports.getAlumnosPaginados = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const tipoAlumno = req.query.tipoAlumno || 'todos'; // 'todos', 'escolarizado', 'semiescolarizado'
+
+    const skip = (page - 1) * limit;
+
+    // Carreras semiescolarizadas
+    const carrerasSemiescolarizadas = ['ISftwS', 'IDsrS', 'IEIndS', 'ICmpS', 'IRMcaS', 'IElecS'];
+
+    // Construir filtro usando $and para combinar condiciones correctamente
+    let condiciones = [];
+
+    // Filtro por tipo de alumno
+    if (tipoAlumno === 'escolarizado') {
+      condiciones.push({ id_carrera: { $nin: carrerasSemiescolarizadas } });
+    } else if (tipoAlumno === 'semiescolarizado') {
+      condiciones.push({ id_carrera: { $in: carrerasSemiescolarizadas } });
+    }
+
+    // Filtro de búsqueda
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      condiciones.push({
+        $or: [
+          { matricula: searchRegex },
+          { nombre: searchRegex },
+          { correo: searchRegex },
+          { id_carrera: searchRegex }
+        ]
+      });
+    }
+
+    // Construir filtro final
+    const filtro = condiciones.length > 0 ? { $and: condiciones } : {};
+
+    // Obtener total de documentos para calcular páginas
+    const total = await Alumno.countDocuments(filtro);
+    const totalPages = Math.ceil(total / limit);
+
+    // Obtener alumnos paginados
+    const alumnos = await Alumno.find(filtro)
+      .skip(skip)
+      .limit(limit)
+      .sort({ matricula: 1 });
+
+    res.status(200).json({
+      alumnos,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener alumnos paginados:', error);
+    res.status(500).json({ message: 'Error al obtener alumnos paginados', error });
+  }
+};
+
+// Obtener alumnos paginados por carrera (para coordinador)
+exports.getAlumnosCarreraPaginados = async (req, res) => {
+  try {
+    const { matricula } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+
+    const skip = (page - 1) * limit;
+
+    // Buscar el coordinador para obtener su carrera
+    const personal = await Coordinador.findOne({ personalMatricula: matricula });
+    if (!personal) {
+      return res.status(404).json({ message: 'No se encontró un coordinador con esa matrícula.' });
+    }
+
+    const carrera = personal.id_carrera;
+
+    // Construir filtro
+    let condiciones = [{ id_carrera: carrera }];
+
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      condiciones.push({
+        $or: [
+          { matricula: searchRegex },
+          { nombre: searchRegex },
+          { correo: searchRegex }
+        ]
+      });
+    }
+
+    const filtro = { $and: condiciones };
+
+    const total = await Alumno.countDocuments(filtro);
+    const totalPages = Math.ceil(total / limit);
+
+    const alumnos = await Alumno.find(filtro)
+      .skip(skip)
+      .limit(limit)
+      .sort({ matricula: 1 });
+
+    res.status(200).json({
+      alumnos,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener alumnos paginados por carrera:', error);
+    res.status(500).json({ message: 'Error al obtener alumnos paginados por carrera', error });
+  }
+};
+
+// Obtener alumnos paginados por carrera (para administrador)
+exports.getAlumnosCarreraAdminPaginados = async (req, res) => {
+  try {
+    const { matricula } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+
+    const skip = (page - 1) * limit;
+
+    // Buscar el administrador para obtener su carrera
+    const personal = await Administrador.findOne({ personalMatricula: matricula });
+    if (!personal) {
+      return res.status(404).json({ message: 'No se encontró un administrador con esa matrícula.' });
+    }
+
+    const carrera = personal.id_carrera;
+
+    // Construir filtro
+    let condiciones = [{ id_carrera: carrera }];
+
+    if (search && search.trim() !== '') {
+      const searchRegex = new RegExp(search.trim(), 'i');
+      condiciones.push({
+        $or: [
+          { matricula: searchRegex },
+          { nombre: searchRegex },
+          { correo: searchRegex }
+        ]
+      });
+    }
+
+    const filtro = { $and: condiciones };
+
+    const total = await Alumno.countDocuments(filtro);
+    const totalPages = Math.ceil(total / limit);
+
+    const alumnos = await Alumno.find(filtro)
+      .skip(skip)
+      .limit(limit)
+      .sort({ matricula: 1 });
+
+    res.status(200).json({
+      alumnos,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Error al obtener alumnos paginados por carrera (admin):', error);
+    res.status(500).json({ message: 'Error al obtener alumnos paginados por carrera', error });
+  }
+};
+
 // Obtener los alumnos de una carrera específica (administradores)
 exports.getAlumnosCarreraAdmin = async (req, res) => {
 

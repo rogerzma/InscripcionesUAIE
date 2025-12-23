@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
 import { ToastContainer, toast } from 'react-toastify';
-import apiClient from '../utils/axiosConfig'; // Importar la configuración de axios
+import apiClient from '../utils/axiosConfig';
 import 'react-toastify/dist/ReactToastify.css';
 import "./AlumnoList.css";
 
@@ -19,134 +18,156 @@ const AlumnoListCG = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [AlumnoAEliminar, setAlumnoAEliminar] = useState(null);
   const matriculaCord = localStorage.getItem("matricula");
-  const id_carrera = localStorage.getItem("id_carrera");
   const navigate = useNavigate();
   const API_URL = process.env.REACT_APP_API_URL;
 
   // Filtro visual para tipo de alumno
   const [tipoAlumno, setTipoAlumno] = useState("todos"); // "todos", "escolarizado", "semiescolarizado"
 
+  // Estados para paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPrevPage: false
+  });
+
+  // Debounce para búsqueda
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1); // Reset a página 1 cuando cambia la búsqueda
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-    // Recuperar estado guardado de la sesión
-    const estadoGuardado = sessionStorage.getItem("vistaAlumnoCoordGen");
-    
-    // Verificar si se viene de una validación
-    const cameFromValidation = location.state?.reload === true;
+  // Reset página cuando cambia el tipo de alumno
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tipoAlumno]);
 
-    // Si hay un estado guardado, restaurarlo
-    if (estadoGuardado && !cameFromValidation) {
-      const { searchTerm, scrollY, alumnos, tutoresNombres, comprobantes, comprobantePorCarrera } = JSON.parse(estadoGuardado);
+  const fetchAlumnosPaginados = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get(`${API_URL}/api/alumnos/paginados`, {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search: debouncedSearch,
+          tipoAlumno: tipoAlumno
+        }
+      });
 
-      setSearchTerm(searchTerm || "");
-      setAlumnos(alumnos || []);
-      setTutoresNombres(tutoresNombres || {});
-      setComprobantes(comprobantes || []);
-      setComprobantePorCarrera(comprobantePorCarrera ?? true); // por consistencia
+      const { alumnos: alumnosData, pagination: paginationData } = response.data;
 
-      // Scroll hacia la posición anterior
-      setTimeout(() => window.scrollTo(0, scrollY || 0), 0);
-
-      sessionStorage.removeItem("vistaAlumnoCoordGen"); // Solo se restaura una vez
-      setLoading(false); // No hacemos fetch si restauramos
-      return;
-    }
-
-    const fetchAlumnos = async () => {
-      try {
-        const response = await apiClient.get(`${API_URL}/api/alumnos`);
-        const alumnosData = response.data;
-
-        // Obtener los nombres de los tutores
-        const tutoresNombresTemp = {};
-        await Promise.all(alumnosData.map(async (alumno) => {
-          if (alumno.tutor) {
-            try {
-              const tutorResponse = await apiClient.get(`${API_URL}/api/coordinadores/alumnos/${alumno.tutor}`);
-              tutoresNombresTemp[alumno._id] = tutorResponse.data.nombre;
-            } catch (error) {
-              tutoresNombresTemp[alumno._id] = "Error al obtener tutor";
-            }
-          }
-        }));
-
-        // Obtener estatus para cada alumno
-        const fetchEstatus = async (alumno) => {
+      // Obtener los nombres de los tutores
+      const tutoresNombresTemp = {};
+      await Promise.all(alumnosData.map(async (alumno) => {
+        if (alumno.tutor) {
           try {
-            const estatusResponse = await fetch(`${API_URL}/api/tutores/estatus/${alumno.matricula}`,
-              {
-                headers: {
-                  "Authorization": `Bearer ${token}`,
-                  "Content-Type": "application/json"
-                }
+            const tutorResponse = await apiClient.get(`${API_URL}/api/coordinadores/alumnos/${alumno.tutor}`);
+            tutoresNombresTemp[alumno._id] = tutorResponse.data.nombre;
+          } catch (error) {
+            tutoresNombresTemp[alumno._id] = "Error al obtener tutor";
+          }
+        }
+      }));
+
+      // Obtener estatus para cada alumno
+      const fetchEstatus = async (alumno) => {
+        try {
+          const estatusResponse = await fetch(`${API_URL}/api/tutores/estatus/${alumno.matricula}`,
+            {
+              headers: {
+                "Authorization": `Bearer ${token}`,
+                "Content-Type": "application/json"
               }
-            );
-            if (!estatusResponse.ok) throw new Error("Error al obtener el estatus del horario");
-            const estatusData = await estatusResponse.json();
-            return { ...alumno, estatus: estatusData.estatus };
-          } catch (error) {
-            return { ...alumno, estatus: "Desconocido" };
-          }
-        };
+            }
+          );
+          if (!estatusResponse.ok) throw new Error("Error al obtener el estatus del horario");
+          const estatusData = await estatusResponse.json();
+          return { ...alumno, estatus: estatusData.estatus };
+        } catch (error) {
+          return { ...alumno, estatus: "Desconocido" };
+        }
+      };
 
-        const alumnosConEstatus = await Promise.all(alumnosData.map(fetchEstatus));
-        setAlumnos(alumnosConEstatus);
-        setTutoresNombres(tutoresNombresTemp);
+      const alumnosConEstatus = await Promise.all(alumnosData.map(fetchEstatus));
+      setAlumnos(alumnosConEstatus);
+      setTutoresNombres(tutoresNombresTemp);
+      setPagination(paginationData);
 
-        // Obtener carreras únicas
-        const carrerasUnicas = [...new Set(alumnosData.map(a => a.id_carrera))];
-        const comprobanteCarreraTemp = {};
+      // Obtener carreras únicas
+      const carrerasUnicas = [...new Set(alumnosData.map(a => a.id_carrera))];
+      const comprobanteCarreraTemp = {};
 
-        // Consultar el estado de comprobante por cada carrera
-        await Promise.all(carrerasUnicas.map(async (carrera) => {
-          try {
-            const res = await apiClient.get(`${API_URL}/api/coordinadores/comprobante-habilitado/${carrera}`);
-            comprobanteCarreraTemp[carrera] = res.data.comprobantePagoHabilitado;
-          } catch (error) {
-            comprobanteCarreraTemp[carrera] = true; // Por defecto true si falla
-          }
-        }));
-        setComprobantePorCarrera(comprobanteCarreraTemp);
+      // Consultar el estado de comprobante por cada carrera
+      await Promise.all(carrerasUnicas.map(async (carrera) => {
+        try {
+          const res = await apiClient.get(`${API_URL}/api/coordinadores/comprobante-habilitado/${carrera}`);
+          comprobanteCarreraTemp[carrera] = res.data.comprobantePagoHabilitado;
+        } catch (error) {
+          comprobanteCarreraTemp[carrera] = true; // Por defecto true si falla
+        }
+      }));
+      setComprobantePorCarrera(comprobanteCarreraTemp);
 
-      } catch (error) {
-        console.error('Error al obtener alumnos:', error);
-      }
-    };
-
-    const fetchComprobantes = async () => {
-      try {
-        const response = await apiClient.get(`${API_URL}/api/alumnos/comprobantes/lista`);
-        setComprobantes(response.data);
-      } catch (error) {
-        setComprobantes([]);
-      }
-    };
-
-    const fetchData = async () => {
-      await fetchAlumnos();
-      await fetchComprobantes();
+    } catch (error) {
+      console.error('Error al obtener alumnos:', error);
+      toast.error("Error al cargar los alumnos");
+    } finally {
       setLoading(false);
-    };
+    }
+  }, [API_URL, currentPage, itemsPerPage, debouncedSearch, tipoAlumno, token]);
 
-    fetchData();
-  }, [matriculaCord, id_carrera, location.state]);
+  const fetchComprobantes = async () => {
+    try {
+      const response = await apiClient.get(`${API_URL}/api/alumnos/comprobantes/lista`);
+      setComprobantes(response.data);
+    } catch (error) {
+      setComprobantes([]);
+    }
+  };
 
   useEffect(() => {
-      if (location.state?.reload) {
-        window.history.replaceState({}, document.title);
-      }
-    }, []);
+    fetchAlumnosPaginados();
+    fetchComprobantes();
+  }, [fetchAlumnosPaginados]);
+
+  useEffect(() => {
+    if (location.state?.reload) {
+      window.history.replaceState({}, document.title);
+      fetchAlumnosPaginados();
+    }
+  }, [location.state, fetchAlumnosPaginados]);
 
   const guardarEstadoVista = () => {
     sessionStorage.setItem("vistaAlumnoCoordGen", JSON.stringify({
       searchTerm,
+      currentPage,
+      itemsPerPage,
+      tipoAlumno,
       scrollY: window.scrollY,
-      alumnos,
-      tutoresNombres,
-      comprobantes,
-      comprobantePorCarrera,
     }));
   };
+
+  // Restaurar estado al volver
+  useEffect(() => {
+    const estadoGuardado = sessionStorage.getItem("vistaAlumnoCoordGen");
+    if (estadoGuardado && !location.state?.reload) {
+      const { searchTerm: savedSearch, currentPage: savedPage, itemsPerPage: savedLimit, tipoAlumno: savedTipo, scrollY } = JSON.parse(estadoGuardado);
+      setSearchTerm(savedSearch || "");
+      setCurrentPage(savedPage || 1);
+      setItemsPerPage(savedLimit || 10);
+      setTipoAlumno(savedTipo || "todos");
+      setTimeout(() => window.scrollTo(0, scrollY || 0), 100);
+      sessionStorage.removeItem("vistaAlumnoCoordGen");
+    }
+  }, []);
 
   const handleNavigate1 = () => {
     guardarEstadoVista();
@@ -190,9 +211,10 @@ const AlumnoListCG = () => {
   const handleDelete = async () => {
     try {
       await apiClient.delete(`${API_URL}/api/alumnos/${AlumnoAEliminar}`);
-      setAlumnos(prevState => prevState.filter(alumno => alumno._id !== AlumnoAEliminar));
       toast.success("Alumno eliminado con éxito");
       setMostrarModal(false);
+      // Recargar la página actual
+      fetchAlumnosPaginados();
     } catch (error) {
       const errorMessage = error.response?.data?.message || "Hubo un error al eliminar el alumno";
       toast.error(errorMessage);
@@ -212,108 +234,40 @@ const AlumnoListCG = () => {
     }
   };
 
+  // Funciones de paginación
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo(0, 0);
+    }
+  };
+
+  const handleItemsPerPageChange = (e) => {
+    const newLimit = parseInt(e.target.value);
+    setItemsPerPage(newLimit);
+    setCurrentPage(1); // Reset a página 1
+  };
+
+  // Generar números de página para mostrar
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxPagesToShow = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = Math.min(pagination.totalPages, startPage + maxPagesToShow - 1);
+
+    if (endPage - startPage + 1 < maxPagesToShow) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
   if (loading) {
     return <div className="loading">Cargando información de alumnos...</div>;
   }
-
-  // Diccionario de carreras permitidas
-  const carrerasPermitidas = {
-    ISftw: "Ing. en Software",
-    IDsr: "Ing. en Desarrollo",
-    IEInd: "Ing. Electrónica Industrial",
-    ICmp: "Ing. Computación",
-    IRMca: "Ing. Robótica y Mecatrónica",
-    IElec: "Ing. Electricista",
-    ISftwS: "Ing. en SoftwareSemiescolarizado",
-    IDsrS: "Ing. en DesarrolloSemiescolarizado",
-    IEIndS: "Ing. Electrónica IndustrialSemiescolarizado",
-    ICmpS: "Ing. ComputaciónSemiescolarizado",
-    IRMcaS: "Ing. Robótica y MecatrónicaSemiescolarizado",
-    IElecS: "Ing. ElectricistaSemiescolarizado",
-  };
-
-  // Palabras clave para estatus y carreras
-  const estatusClaves = [
-    { clave: "falta de revisar", valor: "falta de revisar" },
-    { clave: "sin revisar", valor: "falta de revisar" },
-    { clave: "revisado", valor: "revisado" },
-    { clave: "en espera", valor: "en espera" }
-  ];
-
-  const carreraClaves = Object.values(carrerasPermitidas).map(nombre => {
-    return nombre
-      .replace(/^Ing\. en\s*/i, "")
-      .replace(/^Ing\.\s*/i, "")
-      .replace(/\s*\(Semiescolarizado\)/i, "")
-      .trim()
-      .toLowerCase();
-  });
-
-
-  // Carreras semiescolarizadas
-  const carrerasSemiescolarizadas = [
-    "ISftwS", "IDsrS", "IEIndS", "ICmpS", "IRMcaS", "IElecS"
-  ];
-
-  // Filtrar alumnos por búsqueda y tipo
-  const alumnosFiltrados = alumnos.filter(alumno => {
-    // Filtro por tipo de alumno
-    if (tipoAlumno === "escolarizado" && carrerasSemiescolarizadas.includes(alumno.id_carrera)) {
-      return false;
-    }
-    if (tipoAlumno === "semiescolarizado" && !carrerasSemiescolarizadas.includes(alumno.id_carrera)) {
-      return false;
-    }
-
-    const search = searchTerm.trim().toLowerCase();
-
-    // Obtener nombre de carrera sin "Ing. en" y sin " (Semiescolarizado)"
-    let nombreCarreraCompleto = carrerasPermitidas[alumno.id_carrera] || "";
-    let nombreCarreraClave = nombreCarreraCompleto
-      .replace(/^Ing\. en\s*/i, "")
-      .replace(/^Ing\./i, "")
-      .replace(/\s*\(Semiescolarizado\)/i, "")
-      .trim()
-      .toLowerCase();
-
-    // Filtro por estatus
-    const estatusFiltro = estatusClaves.find(e => e.clave === search);
-    if (estatusFiltro) {
-      if (estatusFiltro.valor === "falta de revisar") {
-        // Incluye los que son "Falta de revisar", "Sin revisar", vacío o desconocido
-        const estatusAlumno = (alumno.estatus || "").trim().toLowerCase();
-        return (
-          estatusAlumno === "falta de revisar" ||
-          estatusAlumno === "sin revisar" ||
-          estatusAlumno === "" ||
-          estatusAlumno === "desconocido"
-        );
-      }
-      return alumno.estatus && alumno.estatus.trim().toLowerCase() === estatusFiltro.valor;
-    }
-
-    // Filtro por carrera clave
-    if (carreraClaves.includes(search)) {
-      return nombreCarreraClave === search;
-    }
-
-    // Filtros anteriores
-    const nombreCoincide = alumno.nombre.toLowerCase().includes(search);
-    const matriculaCoincide = alumno.matricula.toLowerCase().includes(search);
-    const tutorCoincide =
-      tutoresNombres[alumno._id] &&
-      tutoresNombres[alumno._id].toLowerCase().includes(search);
-    const idCarreraCoincide = alumno.id_carrera && alumno.id_carrera.toLowerCase().includes(search);
-    const carreraNombreCoincide = nombreCarreraClave.includes(search);
-
-    return (
-      nombreCoincide ||
-      matriculaCoincide ||
-      tutorCoincide ||
-      idCarreraCoincide ||
-      carreraNombreCoincide
-    );
-  });
 
   return (
     <div className="alumno-layout">
@@ -321,26 +275,70 @@ const AlumnoListCG = () => {
       <div className="alumno-container">
         <h3>Administrar alumnos</h3>
         <p>Lista de alumnos asociados al programa académico</p>
-        {/* Contenedor de la barra de búsqueda y el botón */}
-    <div className="search-container">
-      <input
-        type="text"
-        placeholder="Buscar por matrícula, nombre, tutor o estatus..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        className="search-bar"
-        style={{ width: "800px" }}
-      />
-    </div>
+
+        {/* Contenedor de la barra de búsqueda */}
+        <div className="search-container">
+          <input
+            type="text"
+            placeholder="Buscar por matrícula, nombre, correo o carrera..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="search-bar"
+            style={{ width: "800px" }}
+          />
+        </div>
 
         {/* Botones de filtro por tipo de alumno */}
         <div className="filtros-alumnos" style={{ marginBottom: '16px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
-          <button onClick={() => setTipoAlumno("escolarizado")}>Escolarizados</button>
-          <button onClick={() => setTipoAlumno("semiescolarizado")}>Semiescolarizados</button>
-          <button onClick={() => setTipoAlumno("todos")}>Todos</button>
+          <button
+            onClick={() => setTipoAlumno("escolarizado")}
+            style={{ backgroundColor: tipoAlumno === 'escolarizado' ? '#1976d2' : undefined, color: tipoAlumno === 'escolarizado' ? 'white' : undefined }}
+          >
+            Escolarizados
+          </button>
+          <button
+            onClick={() => setTipoAlumno("semiescolarizado")}
+            style={{ backgroundColor: tipoAlumno === 'semiescolarizado' ? '#1976d2' : undefined, color: tipoAlumno === 'semiescolarizado' ? 'white' : undefined }}
+          >
+            Semiescolarizados
+          </button>
+          <button
+            onClick={() => setTipoAlumno("todos")}
+            style={{ backgroundColor: tipoAlumno === 'todos' ? '#1976d2' : undefined, color: tipoAlumno === 'todos' ? 'white' : undefined }}
+          >
+            Todos
+          </button>
         </div>
 
-        {alumnosFiltrados.length > 0 ? (
+        {/* Controles de paginación superiores */}
+        <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label htmlFor="itemsPerPage">Mostrar:</label>
+            <select
+              id="itemsPerPage"
+              value={itemsPerPage}
+              onChange={handleItemsPerPageChange}
+              style={{ padding: '5px 10px', borderRadius: '4px', border: '1px solid #ccc' }}
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={30}>30</option>
+              <option value={40}>40</option>
+              <option value={50}>50</option>
+              <option value={60}>60</option>
+              <option value={70}>70</option>
+              <option value={80}>80</option>
+              <option value={90}>90</option>
+              <option value={100}>100</option>
+            </select>
+            <span>por página</span>
+          </div>
+          <div style={{ color: '#666' }}>
+            Mostrando {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, pagination.total)} de {pagination.total} alumnos
+          </div>
+        </div>
+
+        {alumnos.length > 0 ? (
           <div className="alumno-scrollable-table">
             <table className="alumnos-table">
               <thead>
@@ -358,7 +356,7 @@ const AlumnoListCG = () => {
                 </tr>
               </thead>
               <tbody>
-                {alumnosFiltrados.map((alumno) => (
+                {alumnos.map((alumno) => (
                   <tr key={alumno._id}>
                     <td>{alumno.id_carrera}</td>
                     <td>{alumno.matricula}</td>
@@ -462,6 +460,59 @@ const AlumnoListCG = () => {
         ) : (
           <p className="no-alumnos-message">No se encontraron resultados.</p>
         )}
+
+        {/* Controles de paginación inferiores */}
+        {pagination.totalPages > 1 && (
+          <div className="pagination" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', marginTop: '20px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => handlePageChange(1)}
+              disabled={!pagination.hasPrevPage}
+              style={{ padding: '8px 12px', cursor: pagination.hasPrevPage ? 'pointer' : 'not-allowed', opacity: pagination.hasPrevPage ? 1 : 0.5 }}
+            >
+              {'<<'}
+            </button>
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={!pagination.hasPrevPage}
+              style={{ padding: '8px 12px', cursor: pagination.hasPrevPage ? 'pointer' : 'not-allowed', opacity: pagination.hasPrevPage ? 1 : 0.5 }}
+            >
+              {'<'}
+            </button>
+
+            {getPageNumbers().map(pageNum => (
+              <button
+                key={pageNum}
+                onClick={() => handlePageChange(pageNum)}
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: pageNum === currentPage ? '#1976d2' : '#fff',
+                  color: pageNum === currentPage ? '#fff' : '#333',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                {pageNum}
+              </button>
+            ))}
+
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={!pagination.hasNextPage}
+              style={{ padding: '8px 12px', cursor: pagination.hasNextPage ? 'pointer' : 'not-allowed', opacity: pagination.hasNextPage ? 1 : 0.5 }}
+            >
+              {'>'}
+            </button>
+            <button
+              onClick={() => handlePageChange(pagination.totalPages)}
+              disabled={!pagination.hasNextPage}
+              style={{ padding: '8px 12px', cursor: pagination.hasNextPage ? 'pointer' : 'not-allowed', opacity: pagination.hasNextPage ? 1 : 0.5 }}
+            >
+              {'>>'}
+            </button>
+          </div>
+        )}
+
         {mostrarModal && (
           <div className="modal">
             <div className="modal-content">

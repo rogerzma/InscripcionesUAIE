@@ -61,6 +61,9 @@ router.post('/subir-comprobante/:matricula', uploadComprobante.single('comproban
 // Rutas para las operaciones CRUD
 router.post('/', alumnoController.createAlumno);
 router.get('/', alumnoController.getAlumnos);
+router.get('/paginados', alumnoController.getAlumnosPaginados);
+router.get('/carrera-paginados/:matricula', alumnoController.getAlumnosCarreraPaginados);
+router.get('/carrera-admin-paginados/:matricula', alumnoController.getAlumnosCarreraAdminPaginados);
 
 // Rutas específicas ANTES de las genéricas
 router.get('/matricula/:matricula', alumnoController.getAlumnoByMatricula); // Obtener alumno por matrícula

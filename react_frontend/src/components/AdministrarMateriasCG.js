@@ -1,6 +1,5 @@
 
-import React, { useEffect, useState } from "react";
-import axios from "axios";
+import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -31,59 +30,122 @@ const AdministrarMateriasCG = () => {
   const id_carrera = localStorage.getItem("id_carrera");
   const navigate = useNavigate();
 
+  // Estados para paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPrevPage: false
+  });
+
+  // Debounce para búsqueda
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Efecto para debounce de búsqueda
   useEffect(() => {
-      // Cargar el estado guardado desde sessionStorage
-      const estadoGuardado = sessionStorage.getItem("vistaMateriasCoordGen");
-      // Verificar si se viene de la validación de materias
-      const cameFromValidation = location.state?.reload === true;
-  
-      // Si hay un estado guardado y no se viene de la validación, usarlo
-      if (estadoGuardado && !cameFromValidation) {
-        const { searchTerm: savedSearchTerm, scrollY, materias: savedMaterias } = JSON.parse(estadoGuardado);
-  
-        setSearchTerm(savedSearchTerm || "");
-        setMaterias(savedMaterias || []);
-        setTimeout(() => window.scrollTo(0, scrollY || 0), 0);
-  
-        sessionStorage.removeItem("vistaMateriasCoordGen");
-        setLoading(false);
-        return;
-      }
-  
-      // Guardar el estado actual en sessionStorage al salir de la página
-      fetchMaterias();
-      fetchDocentes();
-      
-    }, []);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
+  // Reset página cuando cambia el tipo de carrera
   useEffect(() => {
-      if (location.state?.reload) {
-        window.history.replaceState({}, document.title);
-      }
-    }, []);
+    setCurrentPage(1);
+  }, [tipoCarrera]);
 
-  // Guardar el estado de la vista en sessionStorage
-    const guardarEstadoVista = () => {
-      sessionStorage.setItem("vistaMateriasCoordGen", JSON.stringify({
-        searchTerm,
-        scrollY: window.scrollY,
-        materias
-      }));
-    };
-
-  // Cargar materias desde el backend
-  const fetchMaterias = async () => {
-    setLoading(true);
+  // Función para obtener materias paginadas
+  const fetchMateriasPaginadas = useCallback(async () => {
     try {
-      const response = await apiClient.get(
-        `${API_URL}/api/materias`
-      );
-      setMaterias(response.data);
+      setLoading(true);
+      const response = await apiClient.get(`${API_URL}/api/materias/paginadas`, {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search: debouncedSearch,
+          tipoCarrera: tipoCarrera
+        }
+      });
+
+      const { materias: materiasData, pagination: paginationData } = response.data;
+      setMaterias(materiasData);
+      setPagination(paginationData);
     } catch (error) {
       console.error("Error al obtener datos de materias:", error);
+      toast.error("Error al cargar las materias");
     } finally {
       setLoading(false);
     }
+  }, [API_URL, currentPage, itemsPerPage, debouncedSearch, tipoCarrera]);
+
+  useEffect(() => {
+    fetchMateriasPaginadas();
+    fetchDocentes();
+  }, [fetchMateriasPaginadas]);
+
+  useEffect(() => {
+    if (location.state?.reload) {
+      window.history.replaceState({}, document.title);
+      fetchMateriasPaginadas();
+    }
+  }, [location.state, fetchMateriasPaginadas]);
+
+  // Restaurar estado al volver
+  useEffect(() => {
+    const estadoGuardado = sessionStorage.getItem("vistaMateriasCoordGen");
+    if (estadoGuardado && !location.state?.reload) {
+      const { searchTerm: savedSearch, currentPage: savedPage, itemsPerPage: savedLimit, tipoCarrera: savedTipo, scrollY } = JSON.parse(estadoGuardado);
+      setSearchTerm(savedSearch || "");
+      setCurrentPage(savedPage || 1);
+      setItemsPerPage(savedLimit || 10);
+      setTipoCarrera(savedTipo || "todas");
+      setTimeout(() => window.scrollTo(0, scrollY || 0), 100);
+      sessionStorage.removeItem("vistaMateriasCoordGen");
+    }
+  }, []);
+
+  // Guardar el estado de la vista en sessionStorage
+  const guardarEstadoVista = () => {
+    sessionStorage.setItem("vistaMateriasCoordGen", JSON.stringify({
+      searchTerm,
+      currentPage,
+      itemsPerPage,
+      tipoCarrera,
+      scrollY: window.scrollY
+    }));
+  };
+
+  // Funciones de paginación
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo(0, 0);
+    }
+  };
+
+  const handleItemsPerPageChange = (e) => {
+    const newLimit = parseInt(e.target.value);
+    setItemsPerPage(newLimit);
+    setCurrentPage(1);
+  };
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxPagesToShow = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = Math.min(pagination.totalPages, startPage + maxPagesToShow - 1);
+
+    if (endPage - startPage + 1 < maxPagesToShow) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
   };
 
   // Cargar docentes desde el backend
@@ -107,7 +169,7 @@ const AdministrarMateriasCG = () => {
     try {
       await apiClient.delete(`${API_URL}/api/materias/${materiaAEliminar}`);
       toast.success("Materia eliminada con éxito");
-      fetchMaterias(); // Recargar la lista de materias
+      fetchMateriasPaginadas(); // Recargar la lista de materias
     } catch (error) {
       console.error("Error al eliminar la materia:", error);
       const errorMessage = error.response?.data?.message || error.response?.data?.error || "Error al eliminar la materia";
@@ -157,82 +219,6 @@ const AdministrarMateriasCG = () => {
     return <div className="loading">Cargando información de materias...</div>;
   }
 
-  // Diccionario de carreras permitidas
-  const carrerasPermitidas = {
-    ISftw: "Ing. en Software",
-    IDsr: "Ing. en Desarrollo",
-    IEInd: "Ing. Electrónica Industrial",
-    ICmp: "Ing. Computación",
-    IRMca: "Ing. Robótica y Mecatrónica",
-    IElec: "Ing. Electricista",
-    ISftwS: "Ing. en SoftwareSemiescolarizado",
-    IDsrS: "Ing. en DesarrolloSemiescolarizado",
-    IEIndS: "Ing. Electrónica IndustrialSemiescolarizado",
-    ICmpS: "Ing. ComputaciónSemiescolarizado",
-    IRMcaS: "Ing. Robótica y MecatrónicaSemiescolarizado",
-    IElecS: "Ing. ElectricistaSemiescolarizado",
-  };
-
-  // Palabras clave para carreras
-  const carreraClaves = Object.values(carrerasPermitidas).map(nombre => {
-    return nombre
-      .replace(/^Ing\. en\s*/i, "")
-      .replace(/^Ing\.\s*/i, "")
-      .replace(/\s*\(Semiescolarizado\)/i, "")
-      .trim()
-      .toLowerCase();
-  });
-
-  // Filtrar materias por búsqueda, carrera y tipo
-  const materiasFiltradas = materias.filter((materia) => {
-    const search = searchTerm.toLowerCase();
-
-    // Filtro por tipo de materia
-    if (tipoCarrera === "escolarizada" && carrerasSemiescolarizadas.includes(materia.id_carrera)) {
-      return false;
-    }
-    if (tipoCarrera === "semiescolarizada" && !carrerasSemiescolarizadas.includes(materia.id_carrera)) {
-      return false;
-    }
-
-    // Obtener nombre de carrera sin "Ing. en" y sin " (Semiescolarizado)"
-    let nombreCarreraCompleto = carrerasPermitidas[materia.id_carrera] || "";
-    let nombreCarreraClave = nombreCarreraCompleto
-      .replace(/^Ing\. en\s*/i, "")
-      .replace(/^Ing\.\s*/i, "")
-      .replace(/\s*\(Semiescolarizado\)/i, "")
-      .trim()
-      .toLowerCase();
-
-    // Filtro por carrera clave
-    if (carreraClaves.includes(search)) {
-      return nombreCarreraClave === search;
-    }
-
-    // Filtros anteriores
-    const salonCoincide = materia.salon?.toLowerCase().includes(search);
-    const nombreCoincide = materia.nombre?.toLowerCase().includes(search);
-    const grupoCoincide = materia.grupo?.toLowerCase().includes(search);
-    const idCarreraCoincide = materia.id_carrera?.toLowerCase().includes(search);
-    const carreraNombreCoincide = nombreCarreraClave.includes(search);
-    const docenteCoincide = getDocenteNombre(materia).toLowerCase().includes(search);
-
-    return (
-      salonCoincide ||
-      nombreCoincide ||
-      grupoCoincide ||
-      idCarreraCoincide ||
-      carreraNombreCoincide ||
-      docenteCoincide
-    );
-  });
-
-  
-  
-    if (loading) {
-      return <div className="loading">Cargando información de materias...</div>;
-    }
-
   return (
     <div className="admin-materias">
       <ToastContainer position="top-right" autoClose={3000} />
@@ -253,13 +239,48 @@ const AdministrarMateriasCG = () => {
 
         {/* Botones de filtro por tipo de materia */}
         <div className="filtros-materias" style={{ marginBottom: '16px', display: 'flex', gap: '8px', justifyContent: 'center' }}>
-          <button onClick={() => setTipoCarrera("escolarizada")}>Escolarizadas</button>
-          <button onClick={() => setTipoCarrera("semiescolarizada")}>Semiescolarizadas</button>
-          <button onClick={() => setTipoCarrera("todas")}>Todas</button>
+          <button
+            onClick={() => setTipoCarrera("escolarizada")}
+            style={{ backgroundColor: tipoCarrera === 'escolarizada' ? '#1976d2' : undefined, color: tipoCarrera === 'escolarizada' ? 'white' : undefined }}
+          >
+            Escolarizadas
+          </button>
+          <button
+            onClick={() => setTipoCarrera("semiescolarizada")}
+            style={{ backgroundColor: tipoCarrera === 'semiescolarizada' ? '#1976d2' : undefined, color: tipoCarrera === 'semiescolarizada' ? 'white' : undefined }}
+          >
+            Semiescolarizadas
+          </button>
+          <button
+            onClick={() => setTipoCarrera("todas")}
+            style={{ backgroundColor: tipoCarrera === 'todas' ? '#1976d2' : undefined, color: tipoCarrera === 'todas' ? 'white' : undefined }}
+          >
+            Todas
+          </button>
         </div>
 
+        {/* Controles de paginación superiores */}
+        <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label htmlFor="itemsPerPage">Mostrar:</label>
+            <select
+              id="itemsPerPage"
+              value={itemsPerPage}
+              onChange={handleItemsPerPageChange}
+              style={{ padding: '5px 10px', borderRadius: '4px', border: '1px solid #ccc' }}
+            >
+              {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <span>por página</span>
+          </div>
+          <div style={{ color: '#666' }}>
+            Mostrando {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, pagination.total)} de {pagination.total} materias
+          </div>
+        </div>
 
-        {materiasFiltradas.length > 0 ? (
+        {materias.length > 0 ? (
           <div className="scrollable-table">
             <table className="materia-table">
               <thead>
@@ -282,12 +303,12 @@ const AdministrarMateriasCG = () => {
                   )}
                   <th>Viernes</th>
                   {/* Mostrar Sábado si hay alguna materia semiescolarizada en el filtro 'todas' o si el filtro es semiescolarizada */}
-                  {((tipoCarrera === "todas" && materiasFiltradas.some(m => carrerasSemiescolarizadas.includes(m.id_carrera))) || tipoCarrera === "semiescolarizada") && <th>Sábado</th>}
+                  {((tipoCarrera === "todas" && materias.some(m => carrerasSemiescolarizadas.includes(m.id_carrera))) || tipoCarrera === "semiescolarizada") && <th>Sábado</th>}
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
-                {materiasFiltradas.map((materia) => (
+                {materias.map((materia) => (
                   <tr key={materia._id}>
                     <td>{materia.id_carrera}</td>
                     <td>{materia.grupo}</td>
@@ -316,7 +337,7 @@ const AdministrarMateriasCG = () => {
                     )}
                     <td>{materia.horarios.viernes || "-"}</td>
                     {/* Mostrar Sábado si corresponde */}
-                    {((tipoCarrera === "todas" && materiasFiltradas.some(m => carrerasSemiescolarizadas.includes(m.id_carrera))) || tipoCarrera === "semiescolarizada") && (
+                    {((tipoCarrera === "todas" && materias.some(m => carrerasSemiescolarizadas.includes(m.id_carrera))) || tipoCarrera === "semiescolarizada") && (
                       tipoCarrera === "semiescolarizada" || carrerasSemiescolarizadas.includes(materia.id_carrera)
                         ? <td>{materia.horarios.sabado || "-"}</td>
                         : <td></td>
@@ -365,6 +386,40 @@ const AdministrarMateriasCG = () => {
           </div>
         ) : (
           <p className="no-alumnos-message">No se encontraron resultados.</p>
+        )}
+
+        {/* Controles de paginación inferiores */}
+        {pagination.totalPages > 1 && (
+          <div className="pagination" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', marginTop: '20px', flexWrap: 'wrap' }}>
+            <button onClick={() => handlePageChange(1)} disabled={!pagination.hasPrevPage} style={{ padding: '8px 12px', cursor: pagination.hasPrevPage ? 'pointer' : 'not-allowed', opacity: pagination.hasPrevPage ? 1 : 0.5 }}>
+              {'<<'}
+            </button>
+            <button onClick={() => handlePageChange(currentPage - 1)} disabled={!pagination.hasPrevPage} style={{ padding: '8px 12px', cursor: pagination.hasPrevPage ? 'pointer' : 'not-allowed', opacity: pagination.hasPrevPage ? 1 : 0.5 }}>
+              {'<'}
+            </button>
+            {getPageNumbers().map(pageNum => (
+              <button
+                key={pageNum}
+                onClick={() => handlePageChange(pageNum)}
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: pageNum === currentPage ? '#1976d2' : '#fff',
+                  color: pageNum === currentPage ? '#fff' : '#333',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                {pageNum}
+              </button>
+            ))}
+            <button onClick={() => handlePageChange(currentPage + 1)} disabled={!pagination.hasNextPage} style={{ padding: '8px 12px', cursor: pagination.hasNextPage ? 'pointer' : 'not-allowed', opacity: pagination.hasNextPage ? 1 : 0.5 }}>
+              {'>'}
+            </button>
+            <button onClick={() => handlePageChange(pagination.totalPages)} disabled={!pagination.hasNextPage} style={{ padding: '8px 12px', cursor: pagination.hasNextPage ? 'pointer' : 'not-allowed', opacity: pagination.hasNextPage ? 1 : 0.5 }}>
+              {'>>'}
+            </button>
+          </div>
         )}
 
         {mostrarModal && (

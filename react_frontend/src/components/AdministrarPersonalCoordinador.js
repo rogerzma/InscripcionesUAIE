@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
 import apiClient from '../utils/axiosConfig'; // Importar la configuración de axios
@@ -13,101 +12,159 @@ const AdministrarPersonalCoordinador = () => {
   const [mostrarModalPersonal, setMostrarModalPersonal] = useState(false);
   const [usuarioAEliminar, setUsuarioAEliminar] = useState(null);
   const API_URL = process.env.REACT_APP_API_URL;
-  
+
   const navigate = useNavigate();
   const id_carrera = localStorage.getItem("id_carrera");
-  const location = useLocation(); 
+  const matricula = localStorage.getItem("matricula");
+  const location = useLocation();
 
+  // Estados para paginación
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    totalPages: 0,
+    hasNextPage: false,
+    hasPrevPage: false
+  });
+
+  // Debounce para búsqueda
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Efecto para debounce de búsqueda
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
-    // Verificar si hay un estado guardado en sessionStorage
-    const estadoGuardado = sessionStorage.getItem("vistaPersonalCoord");
-    // Si hay un estado guardado, usarlo para inicializar el componente
-    const cameFromValidation = location.state?.reload === true;
-
-    if (estadoGuardado && !cameFromValidation) {
-      const { searchTerm: savedSearchTerm, scrollY, personal: savedPersonal } = JSON.parse(estadoGuardado);
-
-      setSearchTerm(savedSearchTerm || "");
-      setPersonal(savedPersonal || []);
-      setTimeout(() => window.scrollTo(0, scrollY || 0), 0);
-
-      sessionStorage.removeItem("vistaPersonalCoord");
+  // Función para obtener personal paginado
+  const fetchPersonalPaginado = useCallback(async () => {
+    if (!matricula) {
+      console.error("Matrícula no encontrada en localStorage");
       setLoading(false);
       return;
     }
 
-    // Función para cargar el personal desde el backend
-    const fetchPersonal = async () => {
-      const matricula = localStorage.getItem("matricula");
-      if (!matricula) {
-        console.error("Matrícula no encontrada en localStorage");
-        setLoading(false);
-        return;
-      }
+    try {
+      setLoading(true);
+      const response = await apiClient.get(`${API_URL}/api/personal/carrera-paginados/${matricula}`, {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search: debouncedSearch
+        }
+      });
 
-      try {
-        const response = await apiClient.get(`${API_URL}/api/personal/carrera/${matricula}`);
-        setPersonal(response.data);
-      } catch (error) {
-        console.error("Error al obtener datos del personal:", error.message);
-      } finally {
-        setLoading(false);
-      }
-    };
+      const { personal: personalData, pagination: paginationData } = response.data;
+      setPersonal(personalData);
+      setPagination(paginationData);
+    } catch (error) {
+      console.error("Error al obtener datos del personal:", error.message);
+      toast.error("Error al cargar el personal");
+    } finally {
+      setLoading(false);
+    }
+  }, [API_URL, matricula, currentPage, itemsPerPage, debouncedSearch]);
 
-    fetchPersonal();
-  }, []);
+  useEffect(() => {
+    fetchPersonalPaginado();
+  }, [fetchPersonalPaginado]);
 
   useEffect(() => {
     if (location.state?.reload) {
       window.history.replaceState({}, document.title);
+      fetchPersonalPaginado();
+    }
+  }, [location.state, fetchPersonalPaginado]);
+
+  // Restaurar estado al volver
+  useEffect(() => {
+    const estadoGuardado = sessionStorage.getItem("vistaPersonalCoord");
+    if (estadoGuardado && !location.state?.reload) {
+      const { searchTerm: savedSearch, currentPage: savedPage, itemsPerPage: savedLimit, scrollY } = JSON.parse(estadoGuardado);
+      setSearchTerm(savedSearch || "");
+      setCurrentPage(savedPage || 1);
+      setItemsPerPage(savedLimit || 10);
+      setTimeout(() => window.scrollTo(0, scrollY || 0), 100);
+      sessionStorage.removeItem("vistaPersonalCoord");
     }
   }, []);
 
+  // Funciones de paginación
+  const handlePageChange = (newPage) => {
+    if (newPage >= 1 && newPage <= pagination.totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo(0, 0);
+    }
+  };
+
+  const handleItemsPerPageChange = (e) => {
+    const newLimit = parseInt(e.target.value);
+    setItemsPerPage(newLimit);
+    setCurrentPage(1);
+  };
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxPagesToShow = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = Math.min(pagination.totalPages, startPage + maxPagesToShow - 1);
+
+    if (endPage - startPage + 1 < maxPagesToShow) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
   const handleDownloadCSV = async () => {
-  const id_carrera = localStorage.getItem("id_carrera");
-  const matriculas = personalFiltrado.map((p) => p.matricula);
+    const id_carrera = localStorage.getItem("id_carrera");
+    const matriculas = personal.map((p) => p.matricula);
 
-  if (!id_carrera || matriculas.length === 0) {
-    toast.error("No hay personal filtrado o falta el id_carrera.");
-    return;
-  }
+    if (!id_carrera || matriculas.length === 0) {
+      toast.error("No hay personal o falta el id_carrera.");
+      return;
+    }
 
-  try {
-    const response = await apiClient.post(
-      `${API_URL}/api/personal/exportar-csv/carrera-filtrados/${id_carrera}`,
-      { matriculas },
-      { responseType: "blob" }
-    );
+    try {
+      const response = await apiClient.post(
+        `${API_URL}/api/personal/exportar-csv/carrera-filtrados/${id_carrera}`,
+        { matriculas },
+        { responseType: "blob" }
+      );
 
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `personal_filtrado_${id_carrera}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-  } catch (error) {
-    console.error("Error al descargar CSV filtrado de personal:", error);
-    toast.error("No se pudo descargar el archivo.");
-  }
-};
-    const handleDownloadDB = () => {
-        setMostrarModalPersonal(true);
-      };
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `personal_filtrado_${id_carrera}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      console.error("Error al descargar CSV filtrado de personal:", error);
+      toast.error("No se pudo descargar el archivo.");
+    }
+  };
 
+  const handleDownloadDB = () => {
+    setMostrarModalPersonal(true);
+  };
 
   const handleDelete = async () => {
     try {
-      const formData = {usuarioAEliminar, idCarreraEsperada: id_carrera}; // Incluir id_carrera en los datos del formulario
       await apiClient.request({
         url: `${API_URL}/api/personal/coordinador`,
         method: 'DELETE',
         data: { usuarioAEliminar, idCarreraEsperada: id_carrera }
       });
-      setPersonal(prevState => prevState.filter(persona => persona._id !== usuarioAEliminar));
       toast.success("Personal eliminado con éxito");
+      fetchPersonalPaginado(); // Recargar la lista
     } catch (error) {
       toast.error("El docente o tutor tiene participacion en otra carrera");
     } finally {
@@ -118,8 +175,9 @@ const AdministrarPersonalCoordinador = () => {
   const guardarEstadoVista = () => {
     sessionStorage.setItem("vistaPersonalCoord", JSON.stringify({
       searchTerm,
-      scrollY: window.scrollY,
-      personal
+      currentPage,
+      itemsPerPage,
+      scrollY: window.scrollY
     }));
   };
 
@@ -152,15 +210,6 @@ const AdministrarPersonalCoordinador = () => {
     ...persona,
     rolesTexto: getRoleText(persona.roles).toLowerCase()
   }));
-  
-  const personalFiltrado = personalConRoles.filter(persona => 
-    persona.matricula?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    persona.nombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    persona.id_carrera?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    persona.rolesTexto.includes(searchTerm.toLowerCase())
-  );
-  
-  
 
   return (
     <div className="personal-layout">
@@ -178,7 +227,28 @@ const AdministrarPersonalCoordinador = () => {
           className="search-bar"
         />
 
-        {personalFiltrado.length > 0 ? (
+        {/* Controles de paginación superiores */}
+        <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <label htmlFor="itemsPerPage">Mostrar:</label>
+            <select
+              id="itemsPerPage"
+              value={itemsPerPage}
+              onChange={handleItemsPerPageChange}
+              style={{ padding: '5px 10px', borderRadius: '4px', border: '1px solid #ccc' }}
+            >
+              {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <span>por página</span>
+          </div>
+          <div style={{ color: '#666' }}>
+            Mostrando {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, pagination.total)} de {pagination.total} registros
+          </div>
+        </div>
+
+        {personalConRoles.length > 0 ? (
         <div className="personal-scrollable-1">
           <table className="personal-table">
             <thead>
@@ -193,15 +263,8 @@ const AdministrarPersonalCoordinador = () => {
               </tr>
             </thead>
             <tbody>
-            {personalFiltrado.length > 0
-              ? personalFiltrado
-                  .sort((a, b) => {
-                    const roleOrder = { 'C': 1, 'A': 2, 'D': 3, 'T': 4 };
-                    const aRole = a.roles.find(role => roleOrder[role]) || 'T';
-                    const bRole = b.roles.find(role => roleOrder[role]) || 'T';
-                    return roleOrder[aRole] - roleOrder[bRole];
-                  })
-                  .map(personal => (
+            {personalConRoles.length > 0
+              ? personalConRoles.map(personal => (
                     <tr key={personal.matricula}>
                       <td>{['C', 'A'].some(role => personal.roles.includes(role)) ? id_carrera : '-'}</td>
                       <td>{personal.nombre}</td>
@@ -244,6 +307,41 @@ const AdministrarPersonalCoordinador = () => {
       ) : (
         <p className="no-alumnos-message">No se encontraron resultados.</p>
       )}
+
+        {/* Controles de paginación inferiores */}
+        {pagination.totalPages > 1 && (
+          <div className="pagination" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', marginTop: '20px', flexWrap: 'wrap' }}>
+            <button onClick={() => handlePageChange(1)} disabled={!pagination.hasPrevPage} style={{ padding: '8px 12px', cursor: pagination.hasPrevPage ? 'pointer' : 'not-allowed', opacity: pagination.hasPrevPage ? 1 : 0.5 }}>
+              {'<<'}
+            </button>
+            <button onClick={() => handlePageChange(currentPage - 1)} disabled={!pagination.hasPrevPage} style={{ padding: '8px 12px', cursor: pagination.hasPrevPage ? 'pointer' : 'not-allowed', opacity: pagination.hasPrevPage ? 1 : 0.5 }}>
+              {'<'}
+            </button>
+            {getPageNumbers().map(pageNum => (
+              <button
+                key={pageNum}
+                onClick={() => handlePageChange(pageNum)}
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: pageNum === currentPage ? '#1976d2' : '#fff',
+                  color: pageNum === currentPage ? '#fff' : '#333',
+                  border: '1px solid #ccc',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                {pageNum}
+              </button>
+            ))}
+            <button onClick={() => handlePageChange(currentPage + 1)} disabled={!pagination.hasNextPage} style={{ padding: '8px 12px', cursor: pagination.hasNextPage ? 'pointer' : 'not-allowed', opacity: pagination.hasNextPage ? 1 : 0.5 }}>
+              {'>'}
+            </button>
+            <button onClick={() => handlePageChange(pagination.totalPages)} disabled={!pagination.hasNextPage} style={{ padding: '8px 12px', cursor: pagination.hasNextPage ? 'pointer' : 'not-allowed', opacity: pagination.hasNextPage ? 1 : 0.5 }}>
+              {'>>'}
+            </button>
+          </div>
+        )}
+
         {mostrarModal && (
           <div className="modal">
             <div className="modal-content">

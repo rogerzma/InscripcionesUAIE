@@ -20,6 +20,8 @@ router.post('/exportar-csv/carrera-filtrados/:id_carrera', personalController.ex
 
 router.post('/', personalController.createPersonal);
 router.get('/', personalController.getPersonal);
+router.get('/paginados', personalController.getPersonalPaginado);
+router.get('/carrera-paginados/:matricula', personalController.getPersonalByCarreraPaginado);
 router.get('/administradores-generales', personalController.getAdministradoresGenerales);
 router.get('/:id', personalController.getPersonalById);
 router.put('/:id', personalController.updatePersonal);
