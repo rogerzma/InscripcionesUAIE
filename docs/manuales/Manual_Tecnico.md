@@ -55,15 +55,23 @@ Este manual tecnico proporciona informacion detallada sobre la arquitectura, imp
 ### 1.3 Repositorio
 
 ```
-Poryecto_Ing_Electrica/
-|-- node_backend/       # API REST
-|-- react_frontend/     # Aplicacion React
-|-- react-app-native/   # App nativa (en desarrollo)
-|-- exports/            # Historiales academicos
-|-- README.md           # Documentacion principal
-|-- SRS_Actualizado.md  # Especificacion de requerimientos
-|-- Manual_Usuario.md   # Manual de usuario
-|-- Manual_Tecnico.md   # Este documento
+Proyecto_Ing_Electrica/
+├── InscripcionesUAIE/          # Proyecto principal
+│   ├── node_backend/           # API REST con Express y MongoDB
+│   ├── react_frontend/         # Aplicacion React
+│   ├── react-app-native/       # App nativa (en desarrollo)
+│   ├── exports/                # Historiales academicos exportados
+│   ├── docs/                   # Documentacion completa
+│   │   ├── arquitectura/       # Documentacion de arquitectura
+│   │   ├── backend/            # Documentacion de API y modelos
+│   │   │   ├── endpoints/      # Documentacion de endpoints
+│   │   │   └── modelos/        # Documentacion de modelos
+│   │   ├── frontend/           # Documentacion del frontend
+│   │   ├── guias/              # Guias de instalacion y despliegue
+│   │   ├── referencia/         # Roles, permisos, errores
+│   │   └── manuales/           # Manuales tecnicos y de usuario
+│   └── package.json
+└── README.md                   # Documentacion principal
 ```
 
 ---
@@ -77,7 +85,7 @@ Poryecto_Ing_Electrica/
 |                  |       |                  |       |                  |
 |   React App      | <---> |   Express API    | <---> |   MongoDB        |
 |   (Frontend)     |  HTTP |   (Backend)      | Mongo |   Atlas          |
-|   Port: 3000     |  JSON |   Port: 5000     |       |   (Cloud)        |
+|   Port: 3000     |  JSON |   Port: 5001     |       |   (Cloud)        |
 |                  |       |                  |       |                  |
 +------------------+       +--------+---------+       +------------------+
                                     |
@@ -143,13 +151,13 @@ Crear archivo `.env`:
 
 ```env
 # Puerto del servidor
-PORT=5000
+PORT=5001
 
 # Clave secreta para JWT (generar una segura)
 JWT_SECRET=tu_clave_secreta_muy_segura_aqui
 
 # URI de MongoDB Atlas
-MONGODB_URI=mongodb+srv://<usuario>:<password>@cluster.mongodb.net/<database>?retryWrites=true&w=majority
+MONGO_URI=mongodb+srv://<usuario>:<password>@cluster.mongodb.net/<database>?retryWrites=true&w=majority
 
 # Credenciales de email (opcional, para nodemailer)
 EMAIL_USER=correo@gmail.com
@@ -166,7 +174,7 @@ npm install
 Crear archivo `.env`:
 
 ```env
-REACT_APP_API_URL=http://localhost:5000
+REACT_APP_API_URL=http://localhost:5001
 ```
 
 ### 3.5 Iniciar en Desarrollo
@@ -191,9 +199,9 @@ npm start
 
 | Variable | Descripcion | Requerido |
 |----------|-------------|-----------|
-| `PORT` | Puerto del servidor | No (default: 5000) |
+| `PORT` | Puerto del servidor | No (default: 5001) |
 | `JWT_SECRET` | Clave para firmar JWT | Si |
-| `MONGODB_URI` | URI de conexion MongoDB | Si |
+| `MONGO_URI` | URI de conexion MongoDB | Si |
 | `EMAIL_USER` | Correo para SMTP | No |
 | `EMAIL_PASS` | Password de app Gmail | No |
 
@@ -525,7 +533,7 @@ app.use(cors());
 app.use(express.json());
 
 // Conexion a MongoDB
-mongoose.connect(process.env.MONGODB_URI)
+mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('Conectado a MongoDB'))
   .catch(err => console.error('Error de conexion:', err));
 
@@ -956,7 +964,7 @@ react_frontend/
 // src/utils/axiosConfig.js
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
 // Crear instancia de axios
 const axiosInstance = axios.create({
@@ -1304,8 +1312,8 @@ export default HorarioSeleccion;
 
 ### 7.3 Expiracion de Tokens
 
-- **Alumnos:** 30 minutos
-- **Personal:** 1 hora
+- **Alumnos:** 1 hora
+- **Personal:** 24 horas
 
 ### 7.4 Encriptacion de Contrasenas
 
@@ -1440,6 +1448,8 @@ module.exports = { generarPDFHorario };
 
 ### 9.1 Cron Job de Purga Automatica
 
+El sistema tiene un cron job que se ejecuta **diariamente a las 11:53** para verificar si es fecha de borrado y generar el historial academico automaticamente.
+
 ```javascript
 // En server.js
 const cron = require('node-cron');
@@ -1447,70 +1457,122 @@ const HistorialAcademico = require('./models/HistorialAcademico');
 const Alumno = require('./models/Alumno');
 const Materia = require('./models/Materia');
 const Personal = require('./models/Personal');
-const { Parser } = require('json2csv');
+const axios = require('axios');
 const fs = require('fs');
+const path = require('path');
 
-// Ejecutar diariamente a las 00:00
-cron.schedule('0 0 * * *', async () => {
-  console.log('Ejecutando tarea de verificacion de purga...');
-
+// Ejecutar diariamente a las 11:53
+cron.schedule('53 11 * * *', async () => {
   try {
-    const historial = await HistorialAcademico.findOne().sort({ fecha_generacion: -1 });
+    const hoyStr = new Date().toISOString().split('T')[0];
+    const semestreActual = obtenerSemestreActual();
 
-    if (!historial || !historial.fecha_de_borrado) {
-      console.log('No hay fecha de borrado configurada');
-      return;
+    let historial = await HistorialAcademico.findOne({ semestre: semestreActual });
+
+    // Buscar usuario CG0000 para registrar quien genero
+    const matriculaAdmin = 'CG0000';
+    const personal = await Personal.findOne({ matricula: matriculaAdmin });
+    if (!personal) {
+      throw new Error(`Usuario con matricula ${matriculaAdmin} no encontrado.`);
     }
 
-    const hoy = new Date();
-    const fechaBorrado = new Date(historial.fecha_de_borrado);
+    if (!historial) {
+      // Crear historial nuevo con fecha_de_borrado calculada
+      const fechaDeBorrado = calcularFechaDeBorrado(semestreActual);
 
-    if (hoy >= fechaBorrado) {
-      console.log('Iniciando proceso de purga...');
-
-      const semestre = historial.semestre;
-      const carpeta = `./exports/${semestre}`;
-
-      // Crear carpeta si no existe
-      if (!fs.existsSync(carpeta)) {
-        fs.mkdirSync(carpeta, { recursive: true });
-      }
-
-      // Exportar alumnos
-      const alumnos = await Alumno.find();
-      const csvAlumnos = new Parser().parse(alumnos);
-      fs.writeFileSync(`${carpeta}/alumnos.csv`, csvAlumnos);
-
-      // Exportar materias
-      const materias = await Materia.find();
-      const csvMaterias = new Parser().parse(materias);
-      fs.writeFileSync(`${carpeta}/materias.csv`, csvMaterias);
-
-      // Exportar personal (excepto CG y AG)
-      const personal = await Personal.find({ roles: { $nin: ['CG', 'AG'] } });
-      const csvPersonal = new Parser().parse(personal);
-      fs.writeFileSync(`${carpeta}/personal.csv`, csvPersonal);
-
-      // Actualizar historial con rutas de archivos
-      historial.archivos = {
-        alumnos: `${carpeta}/alumnos.csv`,
-        materias: `${carpeta}/materias.csv`,
-        personal: `${carpeta}/personal.csv`
-      };
+      historial = new HistorialAcademico({
+        semestre: semestreActual,
+        fecha_generacion: new Date(),
+        generado_por: personal._id,
+        fecha_de_borrado: fechaDeBorrado,
+        archivos: {
+          alumnos: '',
+          materias: '',
+          personal: ''
+        }
+      });
       await historial.save();
+    }
 
-      // Purgar datos
-      await Alumno.deleteMany({});
-      await Materia.deleteMany({});
-      await Personal.deleteMany({ roles: { $nin: ['CG', 'AG'] } });
+    if (historial.fecha_de_borrado) {
+      const fechaBorradoStr = new Date(historial.fecha_de_borrado).toISOString().split('T')[0];
 
-      console.log('Purga completada exitosamente');
+      if (fechaBorradoStr === hoyStr) {
+        console.log('Hoy es fecha de borrado, generando historial y vaciando colecciones...');
+
+        const folderPath = path.join(__dirname, '..', 'exports', semestreActual);
+        if (!fs.existsSync(folderPath)) {
+          fs.mkdirSync(folderPath, { recursive: true });
+        }
+
+        // Descargar CSVs via endpoints internos
+        const urlAlumnos = 'http://localhost:5001/api/alumnos/exportar-csv';
+        const urlMaterias = 'http://localhost:5001/api/materias/exportar-csv';
+        const urlPersonal = 'http://localhost:5001/api/personal/exportar-csv';
+
+        const rutaAlumnos = path.join(folderPath, 'alumnos.csv');
+        const rutaMaterias = path.join(folderPath, 'materias.csv');
+        const rutaPersonal = path.join(folderPath, 'personal.csv');
+
+        await Promise.all([
+          descargarYGuardar(urlAlumnos, rutaAlumnos),
+          descargarYGuardar(urlMaterias, rutaMaterias),
+          descargarYGuardar(urlPersonal, rutaPersonal),
+        ]);
+
+        historial.fecha_generacion = new Date();
+        historial.generado_por = personal._id;
+        historial.archivos = {
+          alumnos: `/descargas/${semestreActual}/alumnos.csv`,
+          materias: `/descargas/${semestreActual}/materias.csv`,
+          personal: `/descargas/${semestreActual}/personal.csv`
+        };
+        await historial.save();
+
+        // Purgar datos
+        await Promise.all([
+          Alumno.deleteMany({}),
+          vaciarPersonalAut(),  // Funcion que elimina personal excepto CG y AG
+          Materia.deleteMany({})
+        ]);
+
+        console.log('Historial generado y base de datos vaciada correctamente.');
+      }
     }
   } catch (error) {
-    console.error('Error en tarea de purga:', error);
+    console.error('Error en cron job de historial:', error);
   }
 });
+
+// Funciones auxiliares
+function obtenerSemestreActual() {
+  const hoy = new Date();
+  const año = hoy.getFullYear();
+  const mes = hoy.getMonth() + 1;
+  const periodo = mes >= 1 && mes <= 6 ? '1' : '2';
+  return `${año}-${periodo}`;
+}
+
+function calcularFechaDeBorrado(semestre) {
+  const [anioStr, periodo] = semestre.split('-');
+  const anio = parseInt(anioStr, 10);
+  if (periodo === '1') {
+    return new Date(anio, 5, 1); // 1 Junio
+  } else if (periodo === '2') {
+    return new Date(anio, 11, 1); // 1 Diciembre
+  }
+  return null;
+}
+
+async function descargarYGuardar(url, outputPath) {
+  const response = await axios.get(url, { responseType: 'arraybuffer' });
+  fs.writeFileSync(outputPath, response.data);
+}
 ```
+
+**Fechas de borrado automatico:**
+- Semestre 1 (Enero-Junio): Se borra el **1 de Junio**
+- Semestre 2 (Julio-Diciembre): Se borra el **1 de Diciembre**
 
 ### 9.2 Sintaxis de Cron
 
@@ -1575,7 +1637,7 @@ server {
 
     # Backend (proxy)
     location /api {
-        proxy_pass http://localhost:5000;
+        proxy_pass http://localhost:5001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -1585,7 +1647,7 @@ server {
 
     # Archivos subidos
     location /uploads {
-        proxy_pass http://localhost:5000/uploads;
+        proxy_pass http://localhost:5001/uploads;
     }
 }
 ```
@@ -1615,10 +1677,10 @@ pm2 restart api-reinscripcion
 
 ```env
 # Backend (.env)
-PORT=5000
+PORT=5001
 NODE_ENV=production
 JWT_SECRET=clave_muy_segura_de_produccion
-MONGODB_URI=mongodb+srv://...
+MONGO_URI=mongodb+srv://...
 EMAIL_USER=correo@institucion.edu
 EMAIL_PASS=app_password
 ```

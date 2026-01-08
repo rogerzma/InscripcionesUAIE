@@ -10,15 +10,18 @@ Este directorio documenta todos los modelos de datos utilizados en Inscripciones
 
 | Modelo | Coleccion | Descripcion | Documentacion |
 |--------|-----------|-------------|---------------|
+| User | users | Usuario basico del sistema | [Ver](./user.md) |
 | Alumno | alumnos | Estudiantes inscritos en el sistema | [Ver](./alumno.md) |
 | Personal | personal | Personal academico (docentes, tutores, coordinadores, etc.) | [Ver](./personal.md) |
 | Materia | materias | Asignaturas ofrecidas por carrera | [Ver](./materia.md) |
 | Horario | horarios | Horarios de inscripcion de alumnos | [Ver](./horario.md) |
 | HistorialAcademico | historialacademicos | Historico de semestres | [Ver](./historial-academico.md) |
-| Docente | docentes | Informacion de docentes | [Ver](./docente.md) |
-| Coordinador | coordinadores | Informacion de coordinadores | [Ver](./coordinador.md) |
-| Tutor | tutores | Informacion de tutores | [Ver](./tutor.md) |
-| Administrador | administradores | Informacion de administradores | [Ver](./administrador.md) |
+| Docente | docentes | Relacion docente-materias-alumnos | [Ver](./docente.md) |
+| Tutor | tutors | Relacion tutor-alumnos tutorados | [Ver](./tutor.md) |
+| Coordinador | coordinadors | Coordinador de carrera con configuraciones | [Ver](./coordinador.md) |
+| Administrador | administradors | Administrador de carrera (solo lectura) | [Ver](./administrador.md) |
+| CoordinadorGen | coordinadorgens | Coordinador general (todas las carreras) | [Ver](./coordinador-gen.md) |
+| AdministradorGen | administradorgens | Administrador general (solo lectura global) | [Ver](./administrador-gen.md) |
 
 ---
 
@@ -121,17 +124,18 @@ Todos los modelos estan en: `node_backend/models/`
 
 ```
 node_backend/models/
-├── Alumno.js
-├── Personal.js
-├── Materia.js
-├── Horario.js
-├── HistorialAcademico.js
-├── Docentes.js
-├── Coordinadores.js
-├── Tutores.js
-├── Administradores.js
-├── Coordinador_Gen.js
-└── Administrador_Gen.js
+├── User.js                # Usuario basico
+├── Alumno.js              # Estudiantes
+├── Personal.js            # Personal academico
+├── Materia.js             # Materias/Asignaturas
+├── Horario.js             # Horarios de alumnos
+├── HistorialAcademico.js  # Historiales por semestre
+├── Docentes.js            # Relacion docente-materias
+├── Tutores.js             # Relacion tutor-alumnos
+├── Coordinadores.js       # Coordinadores de carrera
+├── Administradores.js     # Administradores de carrera
+├── Coordinador_Gen.js     # Coordinador General
+└── Administrador_Gen.js   # Administrador General
 ```
 
 ---

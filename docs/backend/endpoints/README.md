@@ -9,7 +9,7 @@ Este directorio documenta todos los endpoints REST de la API de InscripcionesUAI
 ## URL Base
 
 ```
-http://localhost:5000
+http://localhost:5001
 ```
 
 **Produccion**: Configurar segun el dominio del servidor
@@ -40,8 +40,10 @@ Ver [Autenticacion JWT](../autenticacion.md) para mas detalles.
 | Coordinadores | `/api/coordinadores` | Operaciones de coordinadores | [Ver](./coordinador.md) |
 | Docentes | `/api/docentes` | Operaciones de docentes | [Ver](./docente.md) |
 | Tutores | `/api/tutores` | Operaciones de tutores | [Ver](./tutor.md) |
-| Admin General | `/api/admin-general` | Operaciones admin general | [Ver](./admin-general.md) |
-| Coord General | `/api/coord-general` | Operaciones coord general | [Ver](./coord-general.md) |
+| Admin General | `/api/admingen` | Operaciones admin general | [Ver](./admingen.md) |
+| Coord General | `/api/cordgen` | Operaciones coord general | [Ver](./cordgen.md) |
+| Historial | `/api/historial` | Gestion de historiales academicos | [Ver](./historial.md) |
+| Users | `/api/users` | Operaciones de usuarios | [Ver](./users.md) |
 
 ---
 
@@ -222,7 +224,7 @@ app.use('/api/', limiter);
 ### Login
 
 ```bash
-curl -X POST http://localhost:5000/api/auth/alumno/login \
+curl -X POST http://localhost:5001/api/auth/alumno/login \
   -H "Content-Type: application/json" \
   -d '{"matricula": "2024630001"}'
 ```
@@ -230,14 +232,14 @@ curl -X POST http://localhost:5000/api/auth/alumno/login \
 ### GET con Token
 
 ```bash
-curl -X GET http://localhost:5000/api/alumnos \
+curl -X GET http://localhost:5001/api/alumnos \
   -H "Authorization: Bearer <token>"
 ```
 
 ### POST con Token
 
 ```bash
-curl -X POST http://localhost:5000/api/materias \
+curl -X POST http://localhost:5001/api/materias \
   -H "Authorization: Bearer <token>" \
   -H "Content-Type: application/json" \
   -d '{"nombre": "Calculo I", "id_carrera": "IE", ...}'
